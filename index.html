@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>HexAsteal</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- HUD -->
+    <header id="hud">
+      <div class="hud-section turn-section">
+        <span class="label">TURN</span>
+        <span id="turn-num" class="value">1</span>
+        <span class="label turn-max">/ 40</span>
+      </div>
+      <div class="hud-section player-section">
+        <span class="color-dot player-dot"></span>
+        <span class="label">YOU</span>
+        <span id="p-hexes" class="value">4</span>
+        <span class="sep">·</span>
+        <span class="icon">⚡</span><span id="p-power" class="value">14</span>
+      </div>
+      <div class="hud-section enemy-section">
+        <span class="color-dot enemy-dot"></span>
+        <span class="label">FOE</span>
+        <span id="e-hexes" class="value">4</span>
+        <span class="sep">·</span>
+        <span class="icon">⚡</span><span id="e-power" class="value">14</span>
+      </div>
+    </header>
+
+    <!-- Power-up Legend -->
+    <div id="legend">
+      <span class="legend-item"><span class="legend-swatch swatch-surge"></span>Surge +3</span>
+      <span class="legend-item"><span class="legend-swatch swatch-shield"></span>Shield</span>
+      <span class="legend-item"><span class="legend-swatch swatch-drain"></span>Drain</span>
+      <span class="legend-item"><span class="legend-swatch swatch-blaze"></span>2× Blaze</span>
+      <span class="legend-item"><span class="legend-swatch swatch-freeze"></span>Freeze</span>
+      <span class="legend-item"><span class="legend-swatch swatch-spread"></span>Spread</span>
+    </div>
+
+    <!-- Board -->
+    <main id="board">
+      <svg id="grid" preserveAspectRatio="xMidYMid meet"></svg>
+    </main>
+
+    <!-- Controls -->
+    <footer id="controls">
+      <div id="status">Select one of your hexes to attack from</div>
+      <div id="buttons">
+        <button id="btn-skip" onclick="HexAsteal.skipAttack()">Skip Attack</button>
+        <button id="btn-new" onclick="HexAsteal.newGame()">New Game</button>
+      </div>
+      <div id="rules-hint">
+        💡 Hexes grow <strong>+1</strong> per turn. Attack adjacent hexes when your power is higher. Capture <strong>colored hexes</strong> to trigger power-ups!
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="overlay" class="hidden">
+    <div id="overlay-content">
+      <h2 id="result-title"></h2>
+      <p id="result-desc"></p>
+      <button onclick="HexAsteal.newGame()">Play Again</button>
+    </div>
+  </div>
+
+  <script src="./script.js"></script>
+</body>
+</html>
