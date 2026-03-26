@@ -11,10 +11,15 @@
 
     <!-- HUD -->
     <header id="hud">
+      <div class="hud-section stage-section">
+        <span class="label">STAGE</span>
+        <span id="stage-num" class="value">1</span>
+        <span id="boss-badge" class="boss-badge hidden">👹</span>
+      </div>
       <div class="hud-section turn-section">
         <span class="label">TURN</span>
         <span id="turn-num" class="value">1</span>
-        <span class="label turn-max">/ 40</span>
+        <span class="label turn-max" id="turn-max">/ 40</span>
       </div>
       <div class="hud-section player-section">
         <span class="color-dot player-dot"></span>
@@ -24,20 +29,21 @@
         <span class="icon">⚡</span><span id="p-power" class="value">14</span>
       </div>
       <div class="hud-section enemy-section">
-        <span class="color-dot enemy-dot"></span>
-        <span class="label">FOE</span>
+        <span class="color-dot enemy-dot" id="enemy-dot"></span>
+        <span class="label" id="foe-label">FOE</span>
         <span id="e-hexes" class="value">4</span>
         <span class="sep">·</span>
         <span class="icon">⚡</span><span id="e-power" class="value">14</span>
       </div>
+      <button id="btn-sound" onclick="HexAsteal.toggleSound()" title="Toggle Sound">🔊</button>
     </header>
 
     <!-- Power-up Legend -->
     <div id="legend">
-      <span class="legend-item"><span class="legend-swatch swatch-surge"></span>Surge +3</span>
+      <span class="legend-item"><span class="legend-swatch swatch-surge"></span>Surge</span>
       <span class="legend-item"><span class="legend-swatch swatch-shield"></span>Shield</span>
       <span class="legend-item"><span class="legend-swatch swatch-drain"></span>Drain</span>
-      <span class="legend-item"><span class="legend-swatch swatch-blaze"></span>2× Blaze</span>
+      <span class="legend-item"><span class="legend-swatch swatch-blaze"></span>Blaze</span>
       <span class="legend-item"><span class="legend-swatch swatch-freeze"></span>Freeze</span>
       <span class="legend-item"><span class="legend-swatch swatch-spread"></span>Spread</span>
     </div>
@@ -52,21 +58,87 @@
       <div id="status">Select one of your hexes to attack from</div>
       <div id="buttons">
         <button id="btn-skip" onclick="HexAsteal.skipAttack()">Skip Attack</button>
-        <button id="btn-new" onclick="HexAsteal.newGame()">New Game</button>
+        <button id="btn-stages" onclick="HexAsteal.showStages()">📋 Stages</button>
+        <button id="btn-restart" onclick="HexAsteal.restartStage()">Restart</button>
       </div>
       <div id="rules-hint">
-        💡 Hexes grow <strong>+1</strong> per turn. Attack adjacent hexes when your power is higher. Capture <strong>colored hexes</strong> to trigger power-ups!
+        💡 Hexes grow <strong>+1</strong>/turn. Attack when power is higher. Capture <strong>colored hexes</strong> for power-ups!
       </div>
     </footer>
+  </div>
 
+  <!-- Tutorial Overlay -->
+  <div id="tut-overlay" class="overlay-screen hidden">
+    <div class="overlay-card tut-card">
+      <div id="tut-icon" class="tut-big-icon"></div>
+      <h2 id="tut-title"></h2>
+      <p id="tut-text"></p>
+      <div class="tut-footer">
+        <button class="btn-ghost" onclick="HexAsteal.skipTutorial()">Skip</button>
+        <div id="tut-dots"></div>
+        <button class="btn-primary" id="tut-next" onclick="HexAsteal.nextTutorial()">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Boss Intro Overlay -->
+  <div id="boss-overlay" class="overlay-screen hidden">
+    <div class="overlay-card boss-card">
+      <div class="demon-glow"></div>
+      <svg class="demon-svg" viewBox="0 0 200 220" width="140" height="154">
+        <!-- Horns -->
+        <path d="M55,95 L25,15 Q45,60 75,80 Z" fill="#6b0000" stroke="#ff3300" stroke-width="1.5"/>
+        <path d="M145,95 L175,15 Q155,60 125,80 Z" fill="#6b0000" stroke="#ff3300" stroke-width="1.5"/>
+        <!-- Head -->
+        <ellipse cx="100" cy="120" rx="56" ry="66" fill="#120000" stroke="#aa0000" stroke-width="2"/>
+        <ellipse cx="100" cy="122" rx="48" ry="58" fill="#1a0505" opacity="0.5"/>
+        <!-- Eyes -->
+        <path d="M60,96 Q78,84 96,96" fill="none" stroke="#cc2200" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M104,96 Q122,84 140,96" fill="none" stroke="#cc2200" stroke-width="2.5" stroke-linecap="round"/>
+        <ellipse cx="78" cy="106" rx="13" ry="7" fill="#ff2200">
+          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="122" cy="106" rx="13" ry="7" fill="#ff2200">
+          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="78" cy="106" rx="4" ry="4" fill="#ffcc00"/>
+        <ellipse cx="122" cy="106" rx="4" ry="4" fill="#ffcc00"/>
+        <!-- Nose -->
+        <path d="M95,120 L100,127 L105,120" fill="none" stroke="#882200" stroke-width="1.5"/>
+        <!-- Mouth with fangs -->
+        <path d="M70,143 Q100,168 130,143" fill="#080000" stroke="#aa0000" stroke-width="1.5"/>
+        <path d="M82,143 L85,157 L88,143" fill="#ddd"/>
+        <path d="M112,143 L115,157 L118,143" fill="#ddd"/>
+        <path d="M93,144 L95,150 L97,144" fill="#bbb"/>
+        <path d="M103,144 L105,150 L107,144" fill="#bbb"/>
+      </svg>
+      <h1 id="boss-name">HEXAFORCE</h1>
+      <p id="boss-sub">Stage 10 — Boss Battle</p>
+      <button class="btn-boss-fight" onclick="HexAsteal.startBoss()">⚔️ FIGHT!</button>
+    </div>
+  </div>
+
+  <!-- Stage Select Overlay -->
+  <div id="stages-overlay" class="overlay-screen hidden">
+    <div class="overlay-card stages-card">
+      <h2>📋 Stage Select</h2>
+      <div id="stage-grid"></div>
+      <div class="stages-footer">
+        <button class="btn-ghost" onclick="HexAsteal.replayTutorial()">📖 Tutorial</button>
+        <button class="btn-primary" onclick="HexAsteal.closeStages()">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Game Over Overlay -->
-  <div id="overlay" class="hidden">
-    <div id="overlay-content">
+  <div id="go-overlay" class="overlay-screen hidden">
+    <div class="overlay-card">
       <h2 id="result-title"></h2>
       <p id="result-desc"></p>
-      <button onclick="HexAsteal.newGame()">Play Again</button>
+      <div class="result-btns">
+        <button class="btn-primary" id="btn-next" onclick="HexAsteal.nextStage()">Next Stage →</button>
+        <button class="btn-ghost" id="btn-retry" onclick="HexAsteal.restartStage()">Retry</button>
+      </div>
     </div>
   </div>
 
