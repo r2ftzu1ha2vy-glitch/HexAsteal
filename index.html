@@ -23,7 +23,7 @@
       </div>
       <div class="hud-section player-section">
         <span class="color-dot player-dot"></span>
-        <span class="label">YOU</span>
+        <span class="label" id="p-label">YOU</span>
         <span id="p-hexes" class="value">4</span>
         <span class="sep">·</span>
         <span class="icon">⚡</span><span id="p-power" class="value">14</span>
@@ -60,6 +60,7 @@
         <button id="btn-skip" onclick="HexAsteal.skipAttack()">Skip Attack</button>
         <button id="btn-stages" onclick="HexAsteal.showStages()">📋 Stages</button>
         <button id="btn-restart" onclick="HexAsteal.restartStage()">Restart</button>
+        <button id="btn-mode" onclick="HexAsteal.showModeSelect()">🎮 Mode</button>
       </div>
       <div id="rules-hint">
         💡 Hexes grow <strong>+1</strong>/turn. Attack when higher. <strong>🔄 Transfer</strong> power to friendly hexes. Ties = -1 power. Grab <strong>colored hexes</strong> for power-ups!
@@ -92,12 +93,8 @@
         <ellipse cx="100" cy="122" rx="48" ry="58" fill="#1a0505" opacity="0.5"/>
         <path d="M60,96 Q78,84 96,96" fill="none" stroke="#cc2200" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M104,96 Q122,84 140,96" fill="none" stroke="#cc2200" stroke-width="2.5" stroke-linecap="round"/>
-        <ellipse cx="78" cy="106" rx="13" ry="7" fill="#ff2200">
-          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
-        </ellipse>
-        <ellipse cx="122" cy="106" rx="13" ry="7" fill="#ff2200">
-          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
-        </ellipse>
+        <ellipse cx="78" cy="106" rx="13" ry="7" fill="#ff2200"><animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/></ellipse>
+        <ellipse cx="122" cy="106" rx="13" ry="7" fill="#ff2200"><animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/></ellipse>
         <ellipse cx="78" cy="106" rx="4" ry="4" fill="#ffcc00"/>
         <ellipse cx="122" cy="106" rx="4" ry="4" fill="#ffcc00"/>
         <path d="M95,120 L100,127 L105,120" fill="none" stroke="#882200" stroke-width="1.5"/>
@@ -134,6 +131,84 @@
         <button class="btn-primary" id="btn-next" onclick="HexAsteal.nextStage()">Next Stage →</button>
         <button class="btn-ghost" id="btn-retry" onclick="HexAsteal.restartStage()">Retry</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ========== MODE SELECT OVERLAY ========== -->
+  <div id="mode-overlay" class="overlay-screen hidden">
+    <div class="overlay-card mode-card">
+      <h2>🎮 Game Mode</h2>
+      <p class="mode-sub">Choose how you want to play</p>
+      <div class="mode-grid">
+        <button class="mode-btn" id="mode-btn-ai" onclick="HexAsteal.selectMode('ai')">
+          <span class="mode-icon">🤖</span>
+          <span class="mode-label">vs Computer</span>
+          <span class="mode-desc">Solo campaign with boss stages</span>
+        </button>
+        <button class="mode-btn" id="mode-btn-local" onclick="HexAsteal.selectMode('local')">
+          <span class="mode-icon">👥</span>
+          <span class="mode-label">Local 2P</span>
+          <span class="mode-desc">Pass &amp; play on same device</span>
+        </button>
+        <button class="mode-btn" id="mode-btn-online" onclick="HexAsteal.selectMode('online')">
+          <span class="mode-icon">🌐</span>
+          <span class="mode-label">Online 2P</span>
+          <span class="mode-desc">Play with friend via room code</span>
+        </button>
+      </div>
+      <button class="btn-ghost" onclick="HexAsteal.closeModeSelect()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ========== ONLINE LOBBY OVERLAY ========== -->
+  <div id="online-overlay" class="overlay-screen hidden">
+    <div class="overlay-card online-card">
+      <h2 id="online-title">🌐 Online Play</h2>
+      <div id="online-create-join">
+        <p class="mode-sub">Create a new room or join an existing one</p>
+        <div class="online-btns">
+          <button class="btn-primary" onclick="HexAsteal.onlineCreate()">➕ Create Room</button>
+          <button class="btn-ghost" onclick="HexAsteal.showJoinRoom()">🔑 Join Room</button>
+        </div>
+      </div>
+      <div id="online-join-form" class="hidden">
+        <p class="mode-sub">Enter the 4-digit room code</p>
+        <div class="code-inputs">
+          <input class="code-digit" maxlength="1" id="cd0" type="text" inputmode="numeric" pattern="[0-9]">
+          <input class="code-digit" maxlength="1" id="cd1" type="text" inputmode="numeric" pattern="[0-9]">
+          <input class="code-digit" maxlength="1" id="cd2" type="text" inputmode="numeric" pattern="[0-9]">
+          <input class="code-digit" maxlength="1" id="cd3" type="text" inputmode="numeric" pattern="[0-9]">
+        </div>
+        <div class="online-btns" style="margin-top:14px">
+          <button class="btn-primary" onclick="HexAsteal.onlineJoin()">Join →</button>
+          <button class="btn-ghost" onclick="HexAsteal.showCreateJoin()">Back</button>
+        </div>
+      </div>
+      <div id="online-waiting" class="hidden">
+        <div class="room-code-display">
+          <span class="room-code-label">ROOM CODE</span>
+          <span id="room-code-big" class="room-code-big">----</span>
+          <button class="copy-btn" onclick="HexAsteal.copyRoomCode()" title="Copy code">📋</button>
+        </div>
+        <p class="mode-sub" id="waiting-text">Waiting for opponent to join…</p>
+        <div class="waiting-dots"><span></span><span></span><span></span></div>
+        <button class="btn-ghost" onclick="HexAsteal.cancelOnline()" style="margin-top:14px">Cancel</button>
+      </div>
+      <div id="online-connecting" class="hidden">
+        <p class="mode-sub">Connecting…</p>
+        <div class="waiting-dots"><span></span><span></span><span></span></div>
+      </div>
+      <button class="btn-ghost" id="online-back-btn" onclick="HexAsteal.cancelOnline()" style="margin-top:10px">← Back</button>
+    </div>
+  </div>
+
+  <!-- Local 2P turn banner -->
+  <div id="local-turn-banner" class="overlay-screen hidden">
+    <div class="overlay-card local-banner-card">
+      <div id="local-banner-icon" class="local-banner-icon">🟢</div>
+      <h2 id="local-banner-title">Player 1's Turn</h2>
+      <p id="local-banner-sub">Pass the device to Player 1</p>
+      <button class="btn-primary" onclick="HexAsteal.dismissLocalBanner()">I'm Ready ▶</button>
     </div>
   </div>
 
