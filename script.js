@@ -34,9 +34,14 @@ const HexAsteal = (function () {
   // For online: which side am I? PLAYER (host) or PLAYER2 (guest)
   let onlineSide = PLAYER;
   let onlineRoomCode = null;
-  let onlineConn = null; // PeerJS DataConnection
-  let peer = null;       // PeerJS Peer
-  let onlineOpponentReady = false;
+
+  // =========== ONLINE RELAY (Gun.js + BroadcastChannel fallback) ===========
+  // Uses Gun.js decentralized real-time DB — no backend, works cross-device
+  let gun = null;
+  let gunRoom = null;
+  let pollInterval = null;
+  let lastSeenMsgId = null;
+  let onlineReady = false;
 
   // =========== SOUND ENGINE ===========
   const SFX = {
@@ -668,22 +673,30 @@ const HexAsteal = (function () {
     render();
   }
 
-  // =========== ONLINE MULTIPLAYER (PeerJS) ===========
-  const PEER_CONFIG = {
-    // Uses public PeerJS server — works in browser without any backend
-    host: '0.peerjs.com', port: 443, path: '/', secure: true,
-    debug: 0
-  };
+  // =========== ONLINE MULTIPLAYER (Gun.js relay) ===========
+  // Gun.js is a decentralized real-time graph DB that works purely in-browser,
+  // no backend required. Falls back to public relay peers automatically.
 
-  function loadPeerJS(cb) {
-    if (window.Peer) { cb(); return; }
+  function loadGun(cb) {
+    if (window.Gun) { cb(); return; }
     const s = document.createElement('script');
-    s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/gun/gun.js';
     s.onload = cb;
-    s.onerror = () => {
-      setOnlineStatus('Failed to load PeerJS. Check your connection.', 'error');
-    };
+    s.onerror = () => setOnlineStatus('Network error loading relay. Check connection.', 'error');
     document.head.appendChild(s);
+  }
+
+  function initGun() {
+    if (gun) return;
+    // Use multiple public Gun relay peers for reliability
+    gun = Gun({
+      peers: [
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://peer.wallie.io/gun',
+        'https://relay.peer.ooo/gun'
+      ],
+      localStorage: false
+    });
   }
 
   function showOnlineLobby() {
@@ -704,7 +717,6 @@ const HexAsteal = (function () {
     document.getElementById('online-create-join').classList.add('hidden');
     document.getElementById('online-join-form').classList.remove('hidden');
     document.getElementById('online-back-btn').style.display = '';
-    // Focus first digit
     setTimeout(() => document.getElementById('cd0').focus(), 100);
     setupCodeInputs();
   }
@@ -725,41 +737,42 @@ const HexAsteal = (function () {
 
   function onlineCreate() {
     SFX.click();
-    loadPeerJS(() => {
-      document.getElementById('online-create-join').classList.add('hidden');
-      document.getElementById('online-waiting').classList.remove('hidden');
-      document.getElementById('online-back-btn').style.display = 'none';
+    document.getElementById('online-create-join').classList.add('hidden');
+    document.getElementById('online-waiting').classList.remove('hidden');
+    document.getElementById('online-back-btn').style.display = 'none';
 
-      // Generate 4-digit code and use as peer ID
-      const code = String(Math.floor(1000 + Math.random() * 9000));
-      onlineRoomCode = code;
-      document.getElementById('room-code-big').textContent = code;
-      document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    onlineRoomCode = code;
+    document.getElementById('room-code-big').textContent = code;
+    document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
 
-      cleanupOnline();
-      try {
-        peer = new Peer('hexasteal-' + code, PEER_CONFIG);
-      } catch(e) {
-        setOnlineStatus('Could not create room. Try again.', 'error');
-        return;
-      }
+    cleanupOnline();
+    loadGun(() => {
+      initGun();
+      onlineSide = PLAYER;
+      const roomKey = 'hexasteal_room_' + code;
+      gunRoom = gun.get(roomKey);
 
-      peer.on('open', () => {
-        // Now listening for connection
+      // Write initial room state
+      gunRoom.get('state').put({ status: 'waiting', seed: 0, ts: Date.now() });
+
+      // Watch for guest joining
+      gunRoom.get('state').on((data) => {
+        if (!data) return;
+        if (data.status === 'joined' && onlineSide === PLAYER && !onlineReady) {
+          onlineReady = true;
+          const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+          gunRoom.get('state').put({ status: 'started', seed, ts: Date.now() });
+          document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
+          setTimeout(() => {
+            onlineOverlay.classList.add('hidden');
+            startOnlineGame(true, seed);
+          }, 600);
+        }
       });
-      peer.on('connection', (conn) => {
-        onlineConn = conn;
-        onlineSide = PLAYER; // host = player 1
-        setupOnlineConn(conn);
-        document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
-        setTimeout(() => {
-          onlineOverlay.classList.add('hidden');
-          startOnlineGame(true); // host goes first
-        }, 800);
-      });
-      peer.on('error', (err) => {
-        document.getElementById('waiting-text').textContent = 'Connection error. Try a different code.';
-      });
+
+      // Listen for moves from opponent
+      startOnlineMoveListener();
     });
   }
 
@@ -767,75 +780,85 @@ const HexAsteal = (function () {
     SFX.click();
     const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
     if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-      document.getElementById('waiting-text').textContent = 'Enter all 4 digits.';
-      return;
+      setOnlineStatus('Enter all 4 digits.', 'error'); return;
     }
+
     document.getElementById('online-join-form').classList.add('hidden');
     document.getElementById('online-connecting').classList.remove('hidden');
     document.getElementById('online-back-btn').style.display = 'none';
+    document.getElementById('online-connecting').innerHTML =
+      '<p class="mode-sub">Connecting to room ' + code + '…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
 
     onlineRoomCode = code;
-    loadPeerJS(() => {
-      cleanupOnline();
-      try {
-        peer = new Peer(undefined, PEER_CONFIG);
-      } catch(e) {
-        setOnlineStatus('Could not connect. Check your network.', 'error');
-        return;
-      }
-      peer.on('open', () => {
-        const conn = peer.connect('hexasteal-' + code, { reliable: true });
-        onlineConn = conn;
-        onlineSide = PLAYER2; // guest = player 2
-        setupOnlineConn(conn);
-        conn.on('open', () => {
-          document.getElementById('online-connecting').innerHTML = '<p class="mode-sub">Connected! Waiting for host…</p>';
-        });
-        conn.on('error', () => {
-          document.getElementById('online-connecting').innerHTML = '<p class="mode-sub" style="color:#f87171">Could not find room. Check the code.</p>';
-        });
-      });
-      peer.on('error', () => {
-        document.getElementById('online-connecting').innerHTML = '<p class="mode-sub" style="color:#f87171">Connection failed. Try again.</p>';
+    cleanupOnline();
+
+    loadGun(() => {
+      initGun();
+      onlineSide = PLAYER2;
+      const roomKey = 'hexasteal_room_' + code;
+      gunRoom = gun.get(roomKey);
+
+      // Check room exists then signal join
+      let joinTimeout = setTimeout(() => {
+        document.getElementById('online-connecting').innerHTML =
+          '<p class="mode-sub" style="color:#f87171">Room not found. Check the code.</p>';
         document.getElementById('online-back-btn').style.display = '';
+      }, 10000);
+
+      gunRoom.get('state').once((data) => {
+        if (!data || (data.status !== 'waiting' && data.status !== 'joined')) {
+          clearTimeout(joinTimeout);
+          document.getElementById('online-connecting').innerHTML =
+            '<p class="mode-sub" style="color:#f87171">Room not found or already started.</p>';
+          document.getElementById('online-back-btn').style.display = '';
+          return;
+        }
+        clearTimeout(joinTimeout);
+        // Signal that we've joined
+        gunRoom.get('state').put({ status: 'joined', seed: 0, ts: Date.now() });
+        document.getElementById('online-connecting').innerHTML =
+          '<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
+
+        // Wait for host to start
+        gunRoom.get('state').on((d) => {
+          if (!d) return;
+          if (d.status === 'started' && onlineSide === PLAYER2 && !onlineReady) {
+            onlineReady = true;
+            onlineOverlay.classList.add('hidden');
+            startOnlineGame(false, d.seed);
+          }
+        });
       });
+
+      startOnlineMoveListener();
     });
   }
 
-  function setupOnlineConn(conn) {
-    conn.on('data', (data) => {
+  function startOnlineMoveListener() {
+    if (!gunRoom) return;
+    const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+    gunRoom.get(myKey).on((data) => {
+      if (!data || !data.msgId) return;
+      if (data.msgId === lastSeenMsgId) return;
+      lastSeenMsgId = data.msgId;
+      // Only process if it's the opponent's move (not a stale echo)
+      if (phase !== 'wait-online' && data.type !== 'start') return;
       handleOnlineMessage(data);
-    });
-    conn.on('close', () => {
-      if (phase !== 'gameover') {
-        setStatus('⚠️ Opponent disconnected.');
-      }
-    });
-    conn.on('error', () => {
-      setStatus('⚠️ Connection error.');
     });
   }
 
   function sendOnline(msg) {
-    if (onlineConn && onlineConn.open) {
-      try { onlineConn.send(msg); } catch(e) {}
-    }
+    if (!gunRoom) return;
+    const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+    const payload = Object.assign({}, msg, { msgId: Date.now() + '_' + Math.random(), sender: onlineSide });
+    gunRoom.get(myKey).put(payload);
   }
 
   function handleOnlineMessage(data) {
     if (!data || !data.type) return;
-    if (data.type === 'start') {
-      // Host sends seed and initial state
-      if (onlineSide === PLAYER2) {
-        onlineOverlay.classList.add('hidden');
-        startOnlineGame(false, data.seed);
-      }
-    } else if (data.type === 'move') {
-      // Received opponent's move
-      applyRemoteMove(data.move);
-    } else if (data.type === 'skip') {
-      applyRemoteSkip();
-    }
+    if (data.sender === onlineSide) return; // ignore own echoes
+    if (data.type === 'move') applyRemoteMove(data.move);
+    else if (data.type === 'skip') applyRemoteSkip();
   }
 
   // seeded random for sync
@@ -852,31 +875,20 @@ const HexAsteal = (function () {
     turn = 1; phase = 'select';
     selectedHex = null; validTargets = []; transferTargets = []; animating = false;
 
-    const useSeed = isHost ? (Date.now() & 0xffff) : seed;
-    _rngSeed = useSeed;
-
-    // Override randInt to use seeded rand for map generation
-    const origRandInt = window._hexRandInt;
-    window._hexRandInt = seededRand;
+    const useSeed = seed || (Date.now() & 0xffff);
     generateMapSeeded(useSeed);
-    window._hexRandInt = origRandInt;
-
     createBoard();
     growPhaseOwner(PLAYER);
     growPhaseOwner(PLAYER2);
 
-    if (isHost) {
-      sendOnline({ type: 'start', seed: useSeed });
-    }
-
     SFX.stageStart();
     render();
-    const myTurnFirst = (onlineSide === PLAYER); // P1 goes first
-    if (myTurnFirst) {
-      setStatus('🌐 Your turn — select a hex to attack or 🔄 transfer');
+
+    if (onlineSide === PLAYER) {
+      setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
     } else {
       phase = 'wait-online';
-      setStatus('🌐 Waiting for opponent…');
+      setStatus('🌐 Waiting for P1 to move…');
     }
     render();
   }
@@ -894,7 +906,6 @@ const HexAsteal = (function () {
     const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
     p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + seededRand(2)); });
 
-    // Mountains
     let placed = 0, att = 0;
     while (placed < cfg.blocked && att < 300) {
       att++;
@@ -907,12 +918,10 @@ const HexAsteal = (function () {
       placed++;
     }
 
-    // Power-ups
     const neutrals = [];
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++)
         if (grid[r][c].owner === NEUTRAL) neutrals.push([r, c]);
-    // Seeded shuffle
     for (let i = neutrals.length - 1; i > 0; i--) {
       const j = seededRand(i + 1);
       [neutrals[i], neutrals[j]] = [neutrals[j], neutrals[i]];
@@ -929,23 +938,21 @@ const HexAsteal = (function () {
     animating = true;
     if (move.type === 'transfer') {
       const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
+      if (!src || !dst) { animating = false; return; }
       const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
-      src.power -= actual; dst.power += actual;
+      if (actual > 0) { src.power -= actual; dst.power += actual; }
       flashHex(move.sr, move.sc, 'flash-transfer-out', 400);
       flashHex(move.dr, move.dc, 'flash-transfer-in', 400);
       render();
-      setTimeout(() => {
-        animating = false;
-        if (!checkGameOver()) afterOpponentTurn();
-      }, 500);
+      setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 500);
     } else if (move.type === 'attack') {
       const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
+      if (!src || !dst) { animating = false; return; }
       let aPow = src.power;
       if (src.blazeBuffed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
       let dPow = dst.power;
       if (dst.shielded) dPow += 3;
       const capPU = dst.powerup;
-      const wasBoss = dst.boss;
       if (aPow > dPow) {
         dst.owner = src.owner; dst.power = Math.min(aPow-dPow, MAX_POWER);
         src.power = 1; dst.powerup = null; dst.shielded = false;
@@ -956,16 +963,13 @@ const HexAsteal = (function () {
         setStatus(`⚔️ Opponent captured! (${aPow} vs ${dPow})`);
       } else if (aPow === dPow) {
         src.power = Math.max(1, src.power-1);
-        setStatus('⚔️ Opponent tied — deflected!');
+        setStatus('⚔️ Opponent tied!');
       } else {
         src.power = 1; if (dst.power > 1) dst.power -= 1;
         setStatus('⚔️ Opponent attack failed!');
       }
       render();
-      setTimeout(() => {
-        animating = false;
-        if (!checkGameOver()) afterOpponentTurn();
-      }, 700);
+      setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 700);
     }
   }
 
@@ -975,11 +979,11 @@ const HexAsteal = (function () {
   }
 
   function afterOpponentTurn() {
-    // After opponent's turn, it becomes our turn
     turn++;
-    growPhaseOwner(onlineSide); // grow our hexes
+    growPhaseOwner(onlineSide);
     phase = 'select';
-    setStatus('🌐 Your turn — select a hex to attack or 🔄 transfer');
+    const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
+    setStatus(`🌐 Your turn (${label}) — select a hex`);
     render();
   }
 
@@ -998,23 +1002,20 @@ const HexAsteal = (function () {
     SFX.click();
     cleanupOnline();
     onlineOverlay.classList.add('hidden');
-    if (gameMode === 'online') {
-      gameMode = 'ai'; // fall back
-    }
+    if (gameMode === 'online') gameMode = 'ai';
   }
 
   function cleanupOnline() {
-    if (onlineConn) { try { onlineConn.close(); } catch(e) {} onlineConn = null; }
-    if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
+    onlineReady = false;
+    lastSeenMsgId = null;
+    gunRoom = null;
     onlineRoomCode = null;
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
   }
 
   function setOnlineStatus(msg, type) {
     const waiting = document.getElementById('waiting-text');
-    if (waiting) {
-      waiting.textContent = msg;
-      waiting.style.color = type === 'error' ? '#f87171' : '';
-    }
+    if (waiting) { waiting.textContent = msg; waiting.style.color = type === 'error' ? '#f87171' : ''; }
   }
 
   // =========== STAGE MANAGEMENT ===========
