@@ -62,7 +62,7 @@
         <button id="btn-restart" onclick="HexAsteal.restartStage()">Restart</button>
       </div>
       <div id="rules-hint">
-        💡 Hexes grow <strong>+1</strong>/turn. Attack when power is higher. Capture <strong>colored hexes</strong> for power-ups!
+        💡 Hexes grow <strong>+1</strong>/turn. Attack when higher. <strong>🔄 Transfer</strong> power to friendly hexes. Ties = -1 power. Grab <strong>colored hexes</strong> for power-ups!
       </div>
     </footer>
   </div>
@@ -86,13 +86,10 @@
     <div class="overlay-card boss-card">
       <div class="demon-glow"></div>
       <svg class="demon-svg" viewBox="0 0 200 220" width="140" height="154">
-        <!-- Horns -->
         <path d="M55,95 L25,15 Q45,60 75,80 Z" fill="#6b0000" stroke="#ff3300" stroke-width="1.5"/>
         <path d="M145,95 L175,15 Q155,60 125,80 Z" fill="#6b0000" stroke="#ff3300" stroke-width="1.5"/>
-        <!-- Head -->
         <ellipse cx="100" cy="120" rx="56" ry="66" fill="#120000" stroke="#aa0000" stroke-width="2"/>
         <ellipse cx="100" cy="122" rx="48" ry="58" fill="#1a0505" opacity="0.5"/>
-        <!-- Eyes -->
         <path d="M60,96 Q78,84 96,96" fill="none" stroke="#cc2200" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M104,96 Q122,84 140,96" fill="none" stroke="#cc2200" stroke-width="2.5" stroke-linecap="round"/>
         <ellipse cx="78" cy="106" rx="13" ry="7" fill="#ff2200">
@@ -103,9 +100,7 @@
         </ellipse>
         <ellipse cx="78" cy="106" rx="4" ry="4" fill="#ffcc00"/>
         <ellipse cx="122" cy="106" rx="4" ry="4" fill="#ffcc00"/>
-        <!-- Nose -->
         <path d="M95,120 L100,127 L105,120" fill="none" stroke="#882200" stroke-width="1.5"/>
-        <!-- Mouth with fangs -->
         <path d="M70,143 Q100,168 130,143" fill="#080000" stroke="#aa0000" stroke-width="1.5"/>
         <path d="M82,143 L85,157 L88,143" fill="#ddd"/>
         <path d="M112,143 L115,157 L118,143" fill="#ddd"/>
