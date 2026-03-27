@@ -1,6 +1,7 @@
 /* ===========================================
    HEXASTEAL — Territory Conquest
    Stages · Boss Battles · Power-Ups · Sounds
+   Multiplayer: vs AI · Local 2P · Online 2P
    =========================================== */
 
 const HexAsteal = (function () {
@@ -11,6 +12,7 @@ const HexAsteal = (function () {
   const HEX_W = Math.sqrt(3) * HEX_R, ROW_H = HEX_R * 1.5;
   const PAD_X = HEX_W / 2 + 14, PAD_Y = HEX_R + 14;
   const PLAYER = 'player', ENEMY = 'enemy', NEUTRAL = 'neutral', BLOCKED = 'blocked';
+  const PLAYER2 = 'player2'; // local/online P2
   const DIRS_EVEN = [[-1,-1],[-1,0],[0,1],[1,0],[1,-1],[0,-1]];
   const DIRS_ODD  = [[-1,0],[-1,1],[0,1],[1,1],[1,0],[0,-1]];
 
@@ -24,7 +26,19 @@ const HexAsteal = (function () {
   };
   const PU_KEYS = Object.keys(POWERUPS);
 
-  // =========== SOUND ENGINE (Web Audio API) ===========
+  // =========== GAME MODE ===========
+  // 'ai' | 'local' | 'online'
+  let gameMode = 'ai';
+  // For local: whose turn — PLAYER or PLAYER2
+  let localTurn = PLAYER;
+  // For online: which side am I? PLAYER (host) or PLAYER2 (guest)
+  let onlineSide = PLAYER;
+  let onlineRoomCode = null;
+  let onlineConn = null; // PeerJS DataConnection
+  let peer = null;       // PeerJS Peer
+  let onlineOpponentReady = false;
+
+  // =========== SOUND ENGINE ===========
   const SFX = {
     ctx: null, on: true,
     go() {
@@ -110,10 +124,10 @@ const HexAsteal = (function () {
     { icon: '⬡', title: 'Welcome to HexAsteal!', text: 'A turn-based hex territory conquest game. Outsmart the enemy, capture power-ups, and conquer the board!' },
     { icon: '🟢', title: 'Your Territory', text: 'Green hexes are yours. Each shows a power level (1–9). Grow your army and dominate!' },
     { icon: '👆', title: 'Select & Attack', text: 'Click one of your hexes, then click an adjacent enemy or neutral hex to attack it.' },
-    { icon: '🔄', title: 'Transfer Power', text: 'Click your hex, then an adjacent friendly hex to give it power. Source keeps 1, target gains the rest (max 9). Great for powering up front-line hexes!' },
-    { icon: '⚔️', title: 'Power Wins', text: 'Your power must be HIGHER than the target. Winner keeps the difference. Equal power? Attacker just loses 1 — ties are deflected!' },
+    { icon: '🔄', title: 'Transfer Power', text: 'Click your hex, then an adjacent friendly hex to give it power. Source keeps 1, target gains the rest (max 9).' },
+    { icon: '⚔️', title: 'Power Wins', text: 'Your power must be HIGHER than the target. Winner keeps the difference. Equal power? Attacker just loses 1.' },
     { icon: '📈', title: 'Growth Phase', text: 'Every turn, all your hexes gain +1 power (max 9). Build up before striking!' },
-    { icon: '🎨', title: 'Power-Ups!', text: 'Colored hexes have power-ups: Surge (+3), Shield, Drain, Blaze (2×), Freeze, and Spread. Race the AI to grab them!' },
+    { icon: '🎨', title: 'Power-Ups!', text: 'Colored hexes have power-ups: Surge (+3), Shield, Drain, Blaze (2×), Freeze, and Spread. Race to grab them!' },
     { icon: '▲', title: 'Mountains', text: 'Dark hexes with ▲ are impassable. Use them as cover and chokepoints!' },
     { icon: '👹', title: 'Boss Battles', text: 'Every 10th stage is a boss fight against HexAforce! Defeat the demon\'s mega-hex to win.' },
     { icon: '🏆', title: 'Ready?', text: 'Capture all enemy hexes or have the most power when turns run out. Good luck, commander!' }
@@ -147,6 +161,12 @@ const HexAsteal = (function () {
     };
   }
 
+  // Multiplayer always uses a fixed balanced config
+  function mpConfig() {
+    return { maxTurns: 50, eHexes: 4, ePow: 4, pPow: 4, blocked: 5, pups: 8,
+             isBoss: false, bossPow: 0, bossRegen: 1, bossName: null };
+  }
+
   // =========== PROGRESS ===========
   const SAVE_KEY = 'hexasteal_v1';
   let progress = { stage: 1, completed: [], tutDone: false, soundOn: true };
@@ -170,10 +190,12 @@ const HexAsteal = (function () {
   // =========== DOM REFS ===========
   let svgEl, statusEl, turnEl, turnMaxEl, stageNumEl, bossBadge, boardEl;
   let pHexesEl, pPowerEl, eHexesEl, ePowerEl, foeLabel, enemyDot, btnSkip, btnSound;
+  let pLabel;
   let tutOverlay, tutIcon, tutTitle, tutText, tutDots, tutNextBtn;
   let bossOverlay, bossNameEl, bossSubEl;
   let stagesOverlay, stageGridEl;
   let goOverlay, resultTitle, resultDesc, btnNext, btnRetry;
+  let modeOverlay, onlineOverlay, localTurnBanner;
 
   // =========== HEX GEOMETRY ===========
   function hexCenter(r, c) {
@@ -193,15 +215,25 @@ const HexAsteal = (function () {
       .filter(([nr, nc]) => nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && grid[nr][nc].owner !== BLOCKED);
   }
   function getAttackTargets(r, c) {
-    return getNeighbors(r, c).filter(
-      ([nr, nc]) => grid[nr][nc].owner !== grid[r][c].owner
-    );
+    const owner = grid[r][c].owner;
+    return getNeighbors(r, c).filter(([nr, nc]) => grid[nr][nc].owner !== owner);
   }
   function getTransferTargets(r, c) {
     if (grid[r][c].power <= 1) return [];
-    return getNeighbors(r, c).filter(
-      ([nr, nc]) => grid[nr][nc].owner === grid[r][c].owner
-    );
+    return getNeighbors(r, c).filter(([nr, nc]) => grid[nr][nc].owner === grid[r][c].owner);
+  }
+
+  // Helper: whose owner token for current active player
+  function activeOwner() {
+    if (gameMode === 'local') return localTurn;
+    if (gameMode === 'online') return onlineSide;
+    return PLAYER;
+  }
+  // Helper: the opponent owner for the active player
+  function opponentOwner() {
+    const ao = activeOwner();
+    if (gameMode === 'ai') return ENEMY;
+    return ao === PLAYER ? PLAYER2 : PLAYER;
   }
 
   // =========== MAP GENERATION ===========
@@ -225,44 +257,40 @@ const HexAsteal = (function () {
       for (let c = 0; c < COLS; c++) grid[r][c] = makeCell(NEUTRAL, 1 + randInt(4));
     }
 
-    // Player cluster — bottom-left
+    const isMP = gameMode !== 'ai';
+    // Player 1 cluster — bottom-left
     const pStarts = [[5,0],[5,1],[6,0],[6,1]];
     pStarts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER, cfg.pPow + randInt(2)); });
 
-    // Enemy placement
-    if (cfg.isBoss) {
+    if (isMP) {
+      // Player 2 — top-right (mirror)
+      const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
+      p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + randInt(2)); });
+    } else if (cfg.isBoss) {
       // Boss hex at center
       const br = 3, bc = 4;
       grid[br][bc] = makeCell(ENEMY, cfg.bossPow);
       grid[br][bc].boss = true;
-      // Surround with enemy hexes
       const bDirs = br % 2 === 0 ? DIRS_EVEN : DIRS_ODD;
       const bNeigh = shuffle(bDirs.map(([dr,dc]) => [br+dr, bc+dc])
         .filter(([r,c]) => r >= 0 && r < ROWS && c >= 0 && c < COLS));
       let need = cfg.eHexes - 1;
       for (const [r, c] of bNeigh) {
         if (need <= 0) break;
-        if (grid[r][c].owner === NEUTRAL) {
-          grid[r][c] = makeCell(ENEMY, cfg.ePow + randInt(2));
-          need--;
-        }
+        if (grid[r][c].owner === NEUTRAL) { grid[r][c] = makeCell(ENEMY, cfg.ePow + randInt(2)); need--; }
       }
-      // Fill remaining from second ring if needed
       if (need > 0) {
         for (const [r, c] of bNeigh) {
           if (need <= 0) break;
           const n2 = getNeighbors(r, c);
           for (const [nr, nc] of shuffle(n2)) {
             if (need <= 0) break;
-            if (grid[nr][nc].owner === NEUTRAL) {
-              grid[nr][nc] = makeCell(ENEMY, cfg.ePow + randInt(2));
-              need--;
-            }
+            if (grid[nr][nc].owner === NEUTRAL) { grid[nr][nc] = makeCell(ENEMY, cfg.ePow + randInt(2)); need--; }
           }
         }
       }
     } else {
-      // Normal: enemy cluster in top-right expanding
+      // Normal AI: enemy cluster top-right
       const ePrimary = [[0,7],[0,8],[1,7],[1,8]];
       const used = new Set(ePrimary.map(([r,c]) => `${r},${c}`));
       ePrimary.forEach(([r,c]) => { grid[r][c] = makeCell(ENEMY, cfg.ePow + randInt(2)); });
@@ -274,11 +302,8 @@ const HexAsteal = (function () {
         shuffle(extras);
         for (const [r, c] of extras) {
           if (need <= 0) break;
-          if (used.has(`${r},${c}`)) continue;
-          if (grid[r][c].owner !== NEUTRAL) continue;
-          grid[r][c] = makeCell(ENEMY, cfg.ePow + randInt(2));
-          used.add(`${r},${c}`);
-          need--;
+          if (used.has(`${r},${c}`) || grid[r][c].owner !== NEUTRAL) continue;
+          grid[r][c] = makeCell(ENEMY, cfg.ePow + randInt(2)); used.add(`${r},${c}`); need--;
         }
       }
     }
@@ -316,10 +341,10 @@ const HexAsteal = (function () {
     hexEls = {};
 
     const defs = document.createElementNS(NS, 'defs');
-    ['glow-player:#22c55e:3','glow-enemy:#ef4444:3','glow-select:#fbbf24:5',
-     'glow-boss:#ff0000:6','glow-surge:#22d3ee:4','glow-shield:#a8a29e:4',
-     'glow-drain:#a855f7:4','glow-blaze:#f97316:4','glow-freeze:#7dd3fc:4',
-     'glow-spread:#f472b6:4'].forEach(s => {
+    ['glow-player:#22c55e:3','glow-player2:#3b82f6:3','glow-enemy:#ef4444:3',
+     'glow-select:#fbbf24:5','glow-boss:#ff0000:6','glow-surge:#22d3ee:4',
+     'glow-shield:#a8a29e:4','glow-drain:#a855f7:4','glow-blaze:#f97316:4',
+     'glow-freeze:#7dd3fc:4','glow-spread:#f472b6:4'].forEach(s => {
       const [id, color, rad] = s.split(':');
       defs.appendChild(makeGlow(NS, id, color, +rad));
     });
@@ -361,16 +386,12 @@ const HexAsteal = (function () {
         statusIcon.setAttribute('x', cx); statusIcon.setAttribute('y', cy);
         statusIcon.setAttribute('dy', '-0.9em'); statusIcon.setAttribute('class', 'hex-powerup-icon');
 
-        // Boss hex icon
         const bossIcon = document.createElementNS(NS, 'text');
         bossIcon.setAttribute('x', cx); bossIcon.setAttribute('y', cy);
         bossIcon.setAttribute('dy', '1.6em'); bossIcon.setAttribute('class', 'boss-hex-icon');
 
-        g.appendChild(poly);
-        g.appendChild(txt);
-        g.appendChild(puIcon);
-        g.appendChild(statusIcon);
-        g.appendChild(bossIcon);
+        g.appendChild(poly); g.appendChild(txt);
+        g.appendChild(puIcon); g.appendChild(statusIcon); g.appendChild(bossIcon);
         svgEl.appendChild(g);
         hexEls[`${r},${c}`] = { group: g, polygon: poly, text: txt, puIcon, statusIcon, bossIcon };
       }
@@ -386,8 +407,7 @@ const HexAsteal = (function () {
 
   function makeGlow(ns, id, color, radius) {
     const f = document.createElementNS(ns, 'filter');
-    f.setAttribute('id', id);
-    f.setAttribute('x', '-50%'); f.setAttribute('y', '-50%');
+    f.setAttribute('id', id); f.setAttribute('x', '-50%'); f.setAttribute('y', '-50%');
     f.setAttribute('width', '200%'); f.setAttribute('height', '200%');
     const flood = document.createElementNS(ns, 'feFlood');
     flood.setAttribute('flood-color', color); flood.setAttribute('flood-opacity', '0.6');
@@ -408,6 +428,7 @@ const HexAsteal = (function () {
 
   // =========== RENDERING ===========
   function render() {
+    const ao = activeOwner();
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const key = `${r},${c}`;
@@ -423,17 +444,20 @@ const HexAsteal = (function () {
         if (cell.shielded) cls += ' hex-shielded';
         if (cell.frozen) cls += ' hex-frozen';
 
-        if (selectedHex && selectedHex[0] === r && selectedHex[1] === c) cls += ' hex-selected';
-        else if (isValidTarget(r, c)) cls += ' hex-valid-target';
+        if (selectedHex && selectedHex[0] === r && selectedHex[1] === c) {
+          cls += ' hex-selected';
+          if (ao === PLAYER2) cls += ' p2-selected';
+        } else if (isValidTarget(r, c)) cls += ' hex-valid-target';
         else if (isTransferTarget(r, c)) cls += ' hex-transfer-target';
-        else if (phase === 'select' && cell.owner === PLAYER && !cell.frozen &&
-          (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0))
+        else if (phase === 'select' && cell.owner === ao && !cell.frozen &&
+          (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0)) {
           cls += ' hex-selectable';
+          if (ao === PLAYER2) cls += ' p2-selectable';
+        }
 
         el.polygon.setAttribute('class', cls);
         el.text.textContent = cell.power;
 
-        // Power-up icons
         if (cell.powerup && cell.owner === NEUTRAL) {
           el.puIcon.textContent = POWERUPS[cell.powerup].icon;
           if (!cls.includes('hex-valid-target') && !cls.includes('hex-selected'))
@@ -445,11 +469,9 @@ const HexAsteal = (function () {
             el.polygon.style.filter = '';
         }
 
-        // Boss icon
         el.bossIcon.textContent = (cell.boss && cell.owner === ENEMY) ? '👹' : '';
         if (cell.boss && cell.owner === ENEMY) el.polygon.style.filter = 'url(#glow-boss)';
 
-        // Status icons (buffs)
         let st = '';
         if (cell.blazeBuffed) st += '🔥';
         if (cell.shielded) st += '🛡';
@@ -459,55 +481,64 @@ const HexAsteal = (function () {
     }
     updateHUD();
     btnSkip.disabled = (phase !== 'select' && phase !== 'target');
+
+    // Board bg for local P2 turn
+    if (gameMode === 'local') {
+      boardEl.classList.toggle('p2-turn', localTurn === PLAYER2);
+    }
   }
 
-  function isValidTarget(r, c) {
-    return validTargets.some(([vr, vc]) => vr === r && vc === c);
-  }
-  function isTransferTarget(r, c) {
-    return transferTargets.some(([vr, vc]) => vr === r && vc === c);
-  }
+  function isValidTarget(r, c)    { return validTargets.some(([vr,vc]) => vr===r && vc===c); }
+  function isTransferTarget(r, c) { return transferTargets.some(([vr,vc]) => vr===r && vc===c); }
 
   function updateHUD() {
     let pH = 0, pP = 0, eH = 0, eP = 0;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const o = grid[r][c].owner;
-      if (o === PLAYER) { pH++; pP += grid[r][c].power; }
-      if (o === ENEMY)  { eH++; eP += grid[r][c].power; }
+      const cell = grid[r][c];
+      // "player" side = PLAYER always
+      if (cell.owner === PLAYER) { pH++; pP += cell.power; }
+      // "enemy" side = ENEMY or PLAYER2
+      if (cell.owner === ENEMY || cell.owner === PLAYER2) { eH++; eP += cell.power; }
     }
     turnEl.textContent = turn;
     turnMaxEl.textContent = '/ ' + cfg.maxTurns;
-    stageNumEl.textContent = currentStage;
-    pHexesEl.textContent = pH;
-    pPowerEl.textContent = pP;
-    eHexesEl.textContent = eH;
-    ePowerEl.textContent = eP;
+    stageNumEl.textContent = gameMode === 'ai' ? currentStage : (gameMode === 'local' ? 'L2P' : 'NET');
+    pHexesEl.textContent = pH; pPowerEl.textContent = pP;
+    eHexesEl.textContent = eH; ePowerEl.textContent = eP;
 
-    if (cfg.isBoss) {
+    // HUD labels
+    if (gameMode === 'local') {
+      pLabel.textContent = 'P1';
+      foeLabel.textContent = 'P2';
+      enemyDot.className = 'color-dot player2-dot';
+    } else if (gameMode === 'online') {
+      pLabel.textContent = onlineSide === PLAYER ? 'YOU' : 'OPP';
+      foeLabel.textContent = onlineSide === PLAYER ? 'OPP' : 'YOU';
+      enemyDot.className = 'color-dot player2-dot';
+    } else {
+      pLabel.textContent = 'YOU';
+      foeLabel.textContent = cfg.isBoss ? (cfg.bossName || 'BOSS') : 'FOE';
+      enemyDot.className = 'color-dot enemy-dot';
+    }
+
+    if (cfg.isBoss && gameMode === 'ai') {
       bossBadge.classList.remove('hidden');
-      foeLabel.textContent = cfg.bossName || 'BOSS';
       boardEl.classList.add('boss-mode');
     } else {
       bossBadge.classList.add('hidden');
-      foeLabel.textContent = 'FOE';
       boardEl.classList.remove('boss-mode');
     }
   }
 
   // =========== TUTORIAL ===========
   function showTutorial() {
-    tutStep = 0;
-    renderTutStep();
+    tutStep = 0; renderTutStep();
     tutOverlay.classList.remove('hidden');
   }
-
   function renderTutStep() {
     const s = TUT[tutStep];
-    tutIcon.textContent = s.icon;
-    tutTitle.textContent = s.title;
-    tutText.textContent = s.text;
+    tutIcon.textContent = s.icon; tutTitle.textContent = s.title; tutText.textContent = s.text;
     tutNextBtn.textContent = tutStep === TUT.length - 1 ? '🎮 Play!' : 'Next →';
-    // Dots
     tutDots.innerHTML = '';
     TUT.forEach((_, i) => {
       const d = document.createElement('span');
@@ -515,51 +546,38 @@ const HexAsteal = (function () {
       tutDots.appendChild(d);
     });
   }
-
   function nextTutorial() {
-    SFX.click();
-    tutStep++;
+    SFX.click(); tutStep++;
     if (tutStep >= TUT.length) {
       tutOverlay.classList.add('hidden');
-      progress.tutDone = true;
-      saveProgress();
-      startStage(progress.stage);
-      return;
+      progress.tutDone = true; saveProgress();
+      startStage(progress.stage); return;
     }
     renderTutStep();
   }
-
   function skipTutorial() {
-    SFX.click();
-    tutOverlay.classList.add('hidden');
-    progress.tutDone = true;
-    saveProgress();
+    SFX.click(); tutOverlay.classList.add('hidden');
+    progress.tutDone = true; saveProgress();
     startStage(progress.stage);
   }
-
   function replayTutorial() {
-    SFX.click();
-    stagesOverlay.classList.add('hidden');
-    showTutorial();
+    SFX.click(); stagesOverlay.classList.add('hidden'); showTutorial();
   }
 
   // =========== BOSS INTRO ===========
   function showBossIntro() {
     bossNameEl.textContent = cfg.bossName;
     bossSubEl.textContent = `Stage ${currentStage} — Boss Battle`;
-    bossOverlay.classList.remove('hidden');
-    SFX.bossIntro();
+    bossOverlay.classList.remove('hidden'); SFX.bossIntro();
   }
-
   function startBoss() {
-    SFX.click();
-    bossOverlay.classList.add('hidden');
-    generateAndPlay();
+    SFX.click(); bossOverlay.classList.add('hidden'); generateAndPlay();
   }
 
   // =========== STAGE SELECT ===========
   function showStages() {
     SFX.click();
+    if (gameMode !== 'ai') { setStatus('Stage select is only available in vs Computer mode.'); return; }
     stageGridEl.innerHTML = '';
     for (let s = 1; s <= TOTAL_STAGES; s++) {
       const cell = document.createElement('div');
@@ -568,64 +586,470 @@ const HexAsteal = (function () {
       const curr = s === progress.stage;
       const locked = s > progress.stage;
       const boss = s % 10 === 0;
-
       if (done) cell.classList.add('completed');
       if (curr) cell.classList.add('current');
       if (locked) cell.classList.add('locked');
       if (boss) cell.classList.add('boss-stage');
-
-      if (boss) {
-        cell.innerHTML = `<span class="stage-boss-icon">👹</span><span class="stage-num">${s}</span>`;
-      } else {
-        cell.innerHTML = `<span class="stage-num">${s}</span>`;
-      }
-
+      cell.innerHTML = boss
+        ? `<span class="stage-boss-icon">👹</span><span class="stage-num">${s}</span>`
+        : `<span class="stage-num">${s}</span>`;
       if (!locked) {
         cell.addEventListener('click', () => {
-          SFX.click();
-          stagesOverlay.classList.add('hidden');
-          startStage(s);
+          SFX.click(); stagesOverlay.classList.add('hidden'); startStage(s);
         });
       }
-
       stageGridEl.appendChild(cell);
     }
     stagesOverlay.classList.remove('hidden');
   }
+  function closeStages() { SFX.click(); stagesOverlay.classList.add('hidden'); }
 
-  function closeStages() {
+  // =========== MODE SELECT ===========
+  function showModeSelect() {
     SFX.click();
-    stagesOverlay.classList.remove('hidden');
-    stagesOverlay.classList.add('hidden');
+    // Highlight active mode
+    document.getElementById('mode-btn-ai').classList.toggle('active', gameMode === 'ai');
+    document.getElementById('mode-btn-local').classList.toggle('active', gameMode === 'local');
+    document.getElementById('mode-btn-online').classList.toggle('active', gameMode === 'online');
+    modeOverlay.classList.remove('hidden');
+  }
+  function closeModeSelect() { SFX.click(); modeOverlay.classList.add('hidden'); }
+
+  function selectMode(mode) {
+    SFX.click();
+    modeOverlay.classList.add('hidden');
+    if (mode === gameMode) return; // no change, just close
+
+    gameMode = mode;
+    if (mode === 'ai') {
+      cleanupOnline();
+      startStage(progress.stage);
+    } else if (mode === 'local') {
+      cleanupOnline();
+      startLocalGame();
+    } else if (mode === 'online') {
+      showOnlineLobby();
+    }
+  }
+
+  // =========== LOCAL 2P ===========
+  function startLocalGame() {
+    gameMode = 'local';
+    cfg = mpConfig();
+    localTurn = PLAYER;
+    hideAllOverlays();
+    generateAndPlay();
+  }
+
+  // Show the pass-and-play banner
+  function showLocalTurnBanner() {
+    const banner = localTurnBanner;
+    const icon = document.getElementById('local-banner-icon');
+    const title = document.getElementById('local-banner-title');
+    const sub = document.getElementById('local-banner-sub');
+
+    if (localTurn === PLAYER) {
+      icon.textContent = '🟢';
+      title.textContent = "Player 1's Turn";
+      sub.textContent = 'Pass the device to Player 1';
+    } else {
+      icon.textContent = '🔵';
+      title.textContent = "Player 2's Turn";
+      sub.textContent = 'Pass the device to Player 2';
+    }
+    banner.classList.remove('hidden');
+  }
+  function dismissLocalBanner() {
+    SFX.click();
+    localTurnBanner.classList.add('hidden');
+    phase = 'select';
+    const who = localTurn === PLAYER ? 'Player 1 (green)' : 'Player 2 (blue)';
+    setStatus(`${who} — select a hex to attack or 🔄 transfer`);
+    render();
+  }
+
+  // =========== ONLINE MULTIPLAYER (PeerJS) ===========
+  const PEER_CONFIG = {
+    // Uses public PeerJS server — works in browser without any backend
+    host: '0.peerjs.com', port: 443, path: '/', secure: true,
+    debug: 0
+  };
+
+  function loadPeerJS(cb) {
+    if (window.Peer) { cb(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+    s.onload = cb;
+    s.onerror = () => {
+      setOnlineStatus('Failed to load PeerJS. Check your connection.', 'error');
+    };
+    document.head.appendChild(s);
+  }
+
+  function showOnlineLobby() {
+    onlineOverlay.classList.remove('hidden');
+    showCreateJoin();
+  }
+
+  function showCreateJoin() {
+    document.getElementById('online-create-join').classList.remove('hidden');
+    document.getElementById('online-join-form').classList.add('hidden');
+    document.getElementById('online-waiting').classList.add('hidden');
+    document.getElementById('online-connecting').classList.add('hidden');
+    document.getElementById('online-back-btn').style.display = '';
+  }
+
+  function showJoinRoom() {
+    SFX.click();
+    document.getElementById('online-create-join').classList.add('hidden');
+    document.getElementById('online-join-form').classList.remove('hidden');
+    document.getElementById('online-back-btn').style.display = '';
+    // Focus first digit
+    setTimeout(() => document.getElementById('cd0').focus(), 100);
+    setupCodeInputs();
+  }
+
+  function setupCodeInputs() {
+    for (let i = 0; i < 4; i++) {
+      const el = document.getElementById(`cd${i}`);
+      el.value = '';
+      el.oninput = () => {
+        el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
+        if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
+      };
+      el.onkeydown = (e) => {
+        if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
+      };
+    }
+  }
+
+  function onlineCreate() {
+    SFX.click();
+    loadPeerJS(() => {
+      document.getElementById('online-create-join').classList.add('hidden');
+      document.getElementById('online-waiting').classList.remove('hidden');
+      document.getElementById('online-back-btn').style.display = 'none';
+
+      // Generate 4-digit code and use as peer ID
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      onlineRoomCode = code;
+      document.getElementById('room-code-big').textContent = code;
+      document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+
+      cleanupOnline();
+      try {
+        peer = new Peer('hexasteal-' + code, PEER_CONFIG);
+      } catch(e) {
+        setOnlineStatus('Could not create room. Try again.', 'error');
+        return;
+      }
+
+      peer.on('open', () => {
+        // Now listening for connection
+      });
+      peer.on('connection', (conn) => {
+        onlineConn = conn;
+        onlineSide = PLAYER; // host = player 1
+        setupOnlineConn(conn);
+        document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
+        setTimeout(() => {
+          onlineOverlay.classList.add('hidden');
+          startOnlineGame(true); // host goes first
+        }, 800);
+      });
+      peer.on('error', (err) => {
+        document.getElementById('waiting-text').textContent = 'Connection error. Try a different code.';
+      });
+    });
+  }
+
+  function onlineJoin() {
+    SFX.click();
+    const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
+    if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+      document.getElementById('waiting-text').textContent = 'Enter all 4 digits.';
+      return;
+    }
+    document.getElementById('online-join-form').classList.add('hidden');
+    document.getElementById('online-connecting').classList.remove('hidden');
+    document.getElementById('online-back-btn').style.display = 'none';
+
+    onlineRoomCode = code;
+    loadPeerJS(() => {
+      cleanupOnline();
+      try {
+        peer = new Peer(undefined, PEER_CONFIG);
+      } catch(e) {
+        setOnlineStatus('Could not connect. Check your network.', 'error');
+        return;
+      }
+      peer.on('open', () => {
+        const conn = peer.connect('hexasteal-' + code, { reliable: true });
+        onlineConn = conn;
+        onlineSide = PLAYER2; // guest = player 2
+        setupOnlineConn(conn);
+        conn.on('open', () => {
+          document.getElementById('online-connecting').innerHTML = '<p class="mode-sub">Connected! Waiting for host…</p>';
+        });
+        conn.on('error', () => {
+          document.getElementById('online-connecting').innerHTML = '<p class="mode-sub" style="color:#f87171">Could not find room. Check the code.</p>';
+        });
+      });
+      peer.on('error', () => {
+        document.getElementById('online-connecting').innerHTML = '<p class="mode-sub" style="color:#f87171">Connection failed. Try again.</p>';
+        document.getElementById('online-back-btn').style.display = '';
+      });
+    });
+  }
+
+  function setupOnlineConn(conn) {
+    conn.on('data', (data) => {
+      handleOnlineMessage(data);
+    });
+    conn.on('close', () => {
+      if (phase !== 'gameover') {
+        setStatus('⚠️ Opponent disconnected.');
+      }
+    });
+    conn.on('error', () => {
+      setStatus('⚠️ Connection error.');
+    });
+  }
+
+  function sendOnline(msg) {
+    if (onlineConn && onlineConn.open) {
+      try { onlineConn.send(msg); } catch(e) {}
+    }
+  }
+
+  function handleOnlineMessage(data) {
+    if (!data || !data.type) return;
+    if (data.type === 'start') {
+      // Host sends seed and initial state
+      if (onlineSide === PLAYER2) {
+        onlineOverlay.classList.add('hidden');
+        startOnlineGame(false, data.seed);
+      }
+    } else if (data.type === 'move') {
+      // Received opponent's move
+      applyRemoteMove(data.move);
+    } else if (data.type === 'skip') {
+      applyRemoteSkip();
+    }
+  }
+
+  // seeded random for sync
+  let _rngSeed = 0;
+  function seededRand(n) {
+    _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
+    return Math.abs(_rngSeed) % n;
+  }
+
+  function startOnlineGame(isHost, seed) {
+    gameMode = 'online';
+    cfg = mpConfig();
+    hideAllOverlays();
+    turn = 1; phase = 'select';
+    selectedHex = null; validTargets = []; transferTargets = []; animating = false;
+
+    const useSeed = isHost ? (Date.now() & 0xffff) : seed;
+    _rngSeed = useSeed;
+
+    // Override randInt to use seeded rand for map generation
+    const origRandInt = window._hexRandInt;
+    window._hexRandInt = seededRand;
+    generateMapSeeded(useSeed);
+    window._hexRandInt = origRandInt;
+
+    createBoard();
+    growPhaseOwner(PLAYER);
+    growPhaseOwner(PLAYER2);
+
+    if (isHost) {
+      sendOnline({ type: 'start', seed: useSeed });
+    }
+
+    SFX.stageStart();
+    render();
+    const myTurnFirst = (onlineSide === PLAYER); // P1 goes first
+    if (myTurnFirst) {
+      setStatus('🌐 Your turn — select a hex to attack or 🔄 transfer');
+    } else {
+      phase = 'wait-online';
+      setStatus('🌐 Waiting for opponent…');
+    }
+    render();
+  }
+
+  // Map generation using seeded random
+  function generateMapSeeded(seed) {
+    _rngSeed = seed;
+    grid = [];
+    for (let r = 0; r < ROWS; r++) {
+      grid[r] = [];
+      for (let c = 0; c < COLS; c++) grid[r][c] = makeCell(NEUTRAL, 1 + seededRand(4));
+    }
+    const pStarts = [[5,0],[5,1],[6,0],[6,1]];
+    pStarts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER, cfg.pPow + seededRand(2)); });
+    const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
+    p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + seededRand(2)); });
+
+    // Mountains
+    let placed = 0, att = 0;
+    while (placed < cfg.blocked && att < 300) {
+      att++;
+      const r = seededRand(ROWS), c = seededRand(COLS);
+      if (grid[r][c].owner !== NEUTRAL) continue;
+      const nearP = pStarts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      const nearP2 = p2Starts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      if (nearP || nearP2) continue;
+      grid[r][c] = makeCell(BLOCKED, 0);
+      placed++;
+    }
+
+    // Power-ups
+    const neutrals = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (grid[r][c].owner === NEUTRAL) neutrals.push([r, c]);
+    // Seeded shuffle
+    for (let i = neutrals.length - 1; i > 0; i--) {
+      const j = seededRand(i + 1);
+      [neutrals[i], neutrals[j]] = [neutrals[j], neutrals[i]];
+    }
+    const numPU = Math.min(cfg.pups, neutrals.length);
+    for (let i = 0; i < numPU; i++) {
+      const [r, c] = neutrals[i];
+      grid[r][c].powerup = PU_KEYS[i % PU_KEYS.length];
+    }
+  }
+
+  function applyRemoteMove(move) {
+    if (!move) return;
+    animating = true;
+    if (move.type === 'transfer') {
+      const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
+      const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
+      src.power -= actual; dst.power += actual;
+      flashHex(move.sr, move.sc, 'flash-transfer-out', 400);
+      flashHex(move.dr, move.dc, 'flash-transfer-in', 400);
+      render();
+      setTimeout(() => {
+        animating = false;
+        if (!checkGameOver()) afterOpponentTurn();
+      }, 500);
+    } else if (move.type === 'attack') {
+      const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
+      let aPow = src.power;
+      if (src.blazeBuffed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
+      let dPow = dst.power;
+      if (dst.shielded) dPow += 3;
+      const capPU = dst.powerup;
+      const wasBoss = dst.boss;
+      if (aPow > dPow) {
+        dst.owner = src.owner; dst.power = Math.min(aPow-dPow, MAX_POWER);
+        src.power = 1; dst.powerup = null; dst.shielded = false;
+        dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
+        flashHex(move.dr, move.dc, onlineSide === PLAYER ? 'flash-ai-capture' : 'flash-capture', 550);
+        SFX.attack();
+        if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
+        setStatus(`⚔️ Opponent captured! (${aPow} vs ${dPow})`);
+      } else if (aPow === dPow) {
+        src.power = Math.max(1, src.power-1);
+        setStatus('⚔️ Opponent tied — deflected!');
+      } else {
+        src.power = 1; if (dst.power > 1) dst.power -= 1;
+        setStatus('⚔️ Opponent attack failed!');
+      }
+      render();
+      setTimeout(() => {
+        animating = false;
+        if (!checkGameOver()) afterOpponentTurn();
+      }, 700);
+    }
+  }
+
+  function applyRemoteSkip() {
+    setStatus('⚔️ Opponent skipped.');
+    afterOpponentTurn();
+  }
+
+  function afterOpponentTurn() {
+    // After opponent's turn, it becomes our turn
+    turn++;
+    growPhaseOwner(onlineSide); // grow our hexes
+    phase = 'select';
+    setStatus('🌐 Your turn — select a hex to attack or 🔄 transfer');
+    render();
+  }
+
+  function sendMove(moveData) {
+    sendOnline({ type: 'move', move: moveData });
+  }
+
+  function copyRoomCode() {
+    if (onlineRoomCode) {
+      navigator.clipboard.writeText(onlineRoomCode).catch(() => {});
+      SFX.click();
+    }
+  }
+
+  function cancelOnline() {
+    SFX.click();
+    cleanupOnline();
+    onlineOverlay.classList.add('hidden');
+    if (gameMode === 'online') {
+      gameMode = 'ai'; // fall back
+    }
+  }
+
+  function cleanupOnline() {
+    if (onlineConn) { try { onlineConn.close(); } catch(e) {} onlineConn = null; }
+    if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
+    onlineRoomCode = null;
+  }
+
+  function setOnlineStatus(msg, type) {
+    const waiting = document.getElementById('waiting-text');
+    if (waiting) {
+      waiting.textContent = msg;
+      waiting.style.color = type === 'error' ? '#f87171' : '';
+    }
   }
 
   // =========== STAGE MANAGEMENT ===========
   function startStage(s) {
     hideAllOverlays();
-    currentStage = s;
-    cfg = stageConfig(s);
-    if (cfg.isBoss) {
-      showBossIntro();
-    } else {
-      generateAndPlay();
-    }
+    gameMode = 'ai';
+    currentStage = s; cfg = stageConfig(s);
+    if (cfg.isBoss) showBossIntro();
+    else generateAndPlay();
   }
 
   function generateAndPlay() {
-    turn = 1;
-    phase = 'select';
-    selectedHex = null;
-    validTargets = [];
-    animating = false;
+    turn = 1; phase = 'select';
+    selectedHex = null; validTargets = []; transferTargets = []; animating = false;
+
+    if (gameMode === 'local') localTurn = PLAYER;
 
     generateMap();
     createBoard();
-    growPhase(PLAYER);
+    if (gameMode === 'local') {
+      growPhaseOwner(PLAYER);
+      growPhaseOwner(PLAYER2);
+    } else {
+      growPhase(PLAYER);
+    }
     SFX.stageStart();
     render();
-    setStatus(cfg.isBoss
-      ? `⚔️ Boss battle! Defeat the ${cfg.bossName} hex to win!`
-      : 'Your hexes grew +1 · select a hex to attack or 🔄 transfer');
+
+    if (gameMode === 'local') {
+      showLocalTurnBanner();
+    } else if (gameMode === 'ai') {
+      setStatus(cfg.isBoss
+        ? `⚔️ Boss battle! Defeat ${cfg.bossName}!`
+        : 'Your hexes grew +1 · select a hex to attack or 🔄 transfer');
+    }
   }
 
   function stageWon() {
@@ -634,44 +1058,46 @@ const HexAsteal = (function () {
       if (currentStage < TOTAL_STAGES) progress.stage = currentStage + 1;
       saveProgress();
     } else {
-      // Replaying a completed stage — just ensure it's marked
-      if (!progress.completed.includes(currentStage)) {
-        progress.completed.push(currentStage);
-        saveProgress();
-      }
+      if (!progress.completed.includes(currentStage)) { progress.completed.push(currentStage); saveProgress(); }
     }
   }
 
   function nextStage() {
     SFX.click();
     goOverlay.classList.add('hidden');
-    if (currentStage >= TOTAL_STAGES) {
-      showStages();
-    } else {
-      startStage(currentStage + 1);
-    }
+    if (gameMode !== 'ai') { startLocalGame(); return; }
+    if (currentStage >= TOTAL_STAGES) showStages();
+    else startStage(currentStage + 1);
   }
 
   function restartStage() {
-    SFX.click();
-    hideAllOverlays();
+    SFX.click(); hideAllOverlays();
+    if (gameMode === 'local') { startLocalGame(); return; }
+    if (gameMode === 'online') { /* restart not supported online, just close */ return; }
     startStage(currentStage);
   }
 
   function hideAllOverlays() {
-    [tutOverlay, bossOverlay, stagesOverlay, goOverlay].forEach(
-      el => { if (el) el.classList.add('hidden'); }
-    );
+    [tutOverlay, bossOverlay, stagesOverlay, goOverlay, modeOverlay, onlineOverlay, localTurnBanner]
+      .forEach(el => { if (el) el.classList.add('hidden'); });
   }
 
   // =========== CLICK HANDLING ===========
   function handleClick(r, c) {
-    if (animating || phase === 'ai' || phase === 'gameover') return;
+    if (animating || phase === 'ai' || phase === 'gameover' || phase === 'wait-online') return;
+
+    // Online: ignore if not our turn
+    if (gameMode === 'online') {
+      const myOwner = onlineSide;
+      if (grid[r][c].owner !== NEUTRAL && grid[r][c].owner !== myOwner && phase === 'select') return;
+    }
+
+    const ao = activeOwner();
     const cell = grid[r][c];
 
     if (phase === 'select') {
-      if (cell.owner !== PLAYER) return;
-      if (cell.frozen) { setStatus('❄ That hex is frozen — can\'t attack this turn.'); SFX.fail(); return; }
+      if (cell.owner !== ao) return;
+      if (cell.frozen) { setStatus('❄ That hex is frozen.'); SFX.fail(); return; }
       const targets = getAttackTargets(r, c);
       const transfers = getTransferTargets(r, c);
       if (targets.length === 0 && transfers.length === 0) { setStatus('No valid targets from that hex.'); return; }
@@ -680,25 +1106,22 @@ const HexAsteal = (function () {
       const bNote = cell.blazeBuffed ? ' 🔥 Blaze active — 2× damage!' : '';
       const tNote = transfers.length > 0 ? ' · 🔄 friendly = transfer' : '';
       setStatus(`Power ${cell.power} selected · choose target${bNote}${tNote}`);
-      render();
-      return;
+      render(); return;
     }
 
     if (phase === 'target') {
-      if (cell.owner === PLAYER) {
+      if (cell.owner === ao) {
         if (r === selectedHex[0] && c === selectedHex[1]) { deselect(); return; }
-        // Transfer to adjacent friendly hex
         if (isTransferTarget(r, c)) { executeTransfer(selectedHex[0], selectedHex[1], r, c); return; }
-        // Re-select a different hex
         if (cell.frozen) { setStatus('❄ Frozen hex.'); SFX.fail(); return; }
         const targets = getAttackTargets(r, c);
         const transfers = getTransferTargets(r, c);
-        if (targets.length === 0 && transfers.length === 0) { setStatus('No targets from that hex.'); return; }
+        if (targets.length === 0 && transfers.length === 0) { setStatus('No targets.'); return; }
         selectedHex = [r, c]; validTargets = targets; transferTargets = transfers;
         SFX.select();
         const bNote = cell.blazeBuffed ? ' 🔥 2×!' : '';
-        const tNote = transfers.length > 0 ? ' · 🔄 transfer' : '';
-        setStatus(`Power ${cell.power} selected · choose target${bNote}${tNote}`);
+        const tNote = transfers.length > 0 ? ' · 🔄' : '';
+        setStatus(`Power ${cell.power} selected${bNote}${tNote}`);
         render(); return;
       }
       if (!isValidTarget(r, c)) return;
@@ -718,21 +1141,24 @@ const HexAsteal = (function () {
     animating = true;
     const src = grid[sr][sc], dst = grid[dr][dc];
     const amount = src.power - 1;
-    if (amount <= 0) { animating = false; setStatus('Not enough power to transfer.'); SFX.fail(); return; }
+    if (amount <= 0) { animating = false; setStatus('Not enough power.'); SFX.fail(); return; }
     const actual = Math.min(amount, MAX_POWER - dst.power);
-    if (actual <= 0) { animating = false; setStatus('Target hex is already at max power.'); SFX.fail(); return; }
-    src.power -= actual;
-    dst.power += actual;
+    if (actual <= 0) { animating = false; setStatus('Target already at max.'); SFX.fail(); return; }
+    src.power -= actual; dst.power += actual;
     SFX.transfer();
     flashHex(sr, sc, 'flash-transfer-out', 400);
     flashHex(dr, dc, 'flash-transfer-in', 400);
     setStatus(`🔄 Transferred ${actual} power`);
     selectedHex = null; validTargets = []; transferTargets = [];
     render();
+
+    // Send online
+    if (gameMode === 'online') sendMove({ type:'transfer', sr, sc, dr, dc });
+
     setTimeout(() => {
       animating = false;
       if (checkGameOver()) return;
-      beginAITurn();
+      afterPlayerTurn();
     }, 500);
   }
 
@@ -741,59 +1167,76 @@ const HexAsteal = (function () {
     animating = true;
     SFX.attack();
     const src = grid[sr][sc], dst = grid[dr][dc];
-    let atkPow = src.power;
+    let aPow = src.power;
     const wasBlazed = src.blazeBuffed;
-    if (wasBlazed) { atkPow = Math.min(atkPow * 2, 18); src.blazeBuffed = false; }
+    if (wasBlazed) { aPow = Math.min(aPow * 2, 18); src.blazeBuffed = false; }
     let defPow = dst.power;
     const wasShielded = dst.shielded;
     if (wasShielded) defPow += 3;
     const capturedPU = dst.powerup;
     const wasBoss = dst.boss;
 
-    if (atkPow > defPow) {
-      dst.owner = PLAYER; dst.power = Math.min(atkPow - defPow, MAX_POWER);
+    if (aPow > defPow) {
+      dst.owner = src.owner; dst.power = Math.min(aPow - defPow, MAX_POWER);
       src.power = 1; dst.powerup = null; dst.shielded = false;
       dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
 
-      if (wasBoss) {
-        flashHex(dr, dc, 'flash-boss-die', 800);
-        SFX.bossDefeat();
-      } else {
-        flashHex(dr, dc, 'flash-capture', 550);
-        SFX.capture();
-      }
+      if (wasBoss) { flashHex(dr, dc, 'flash-boss-die', 800); SFX.bossDefeat(); }
+      else { flashHex(dr, dc, 'flash-capture', 550); SFX.capture(); }
 
-      let msg = `✅ Captured! ${wasBlazed ? atkPow+' (🔥2×)' : atkPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`;
+      let msg = `✅ Captured! ${wasBlazed ? aPow+' (🔥2×)' : aPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`;
       if (wasBoss) msg = `💀 ${cfg.bossName} DESTROYED! ${msg}`;
-      if (capturedPU) { SFX.powerup(); msg += ' · ' + applyPowerup(capturedPU, dr, dc, PLAYER); }
+      if (capturedPU) { SFX.powerup(); msg += ' · ' + applyPowerup(capturedPU, dr, dc, src.owner); }
       setStatus(msg);
-    } else if (atkPow === defPow) {
-      // Tie — attacker loses 1 power, defender untouched
+    } else if (aPow === defPow) {
       src.power = Math.max(1, src.power - 1);
-      flashHex(sr, sc, 'flash-fail', 550);
-      SFX.fail();
-      setStatus(`⚔️ Tied ${atkPow} vs ${defPow} — deflected! Power → ${src.power}`);
+      flashHex(sr, sc, 'flash-fail', 550); SFX.fail();
+      setStatus(`⚔️ Tied ${aPow} vs ${defPow} — deflected!`);
     } else {
       src.power = 1;
       if (dst.power > 1) dst.power -= 1;
-      flashHex(sr, sc, 'flash-fail', 550);
-      SFX.fail();
-      setStatus(`❌ Failed ${wasBlazed ? atkPow+' (🔥2×)' : atkPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`);
+      flashHex(sr, sc, 'flash-fail', 550); SFX.fail();
+      setStatus(`❌ Failed ${wasBlazed ? aPow+' (🔥2×)' : aPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`);
     }
 
     selectedHex = null; validTargets = []; transferTargets = [];
     render();
 
+    // Send online
+    if (gameMode === 'online') sendMove({ type:'attack', sr, sc, dr, dc });
+
     setTimeout(() => {
       animating = false;
-      // Boss defeat = instant win
       if (wasBoss && grid[dr][dc].owner === PLAYER) {
-        showEnd('Boss Defeated!', `You destroyed ${cfg.bossName} on stage ${currentStage}!`, 'win');
-        return;
+        showEnd('Boss Defeated!', `You destroyed ${cfg.bossName} on stage ${currentStage}!`, 'win'); return;
       }
       if (checkGameOver()) return;
-      beginAITurn();
+      afterPlayerTurn();
     }, wasBoss ? 1000 : 700);
+  }
+
+  // Called after the active player takes their action
+  function afterPlayerTurn() {
+    if (gameMode === 'ai') {
+      beginAITurn();
+    } else if (gameMode === 'local') {
+      // Switch local turn
+      localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
+      // Grow the NEXT player's hexes
+      growPhaseOwner(localTurn);
+      turn++;
+      phase = 'select';
+      render();
+      showLocalTurnBanner();
+    } else if (gameMode === 'online') {
+      // After sending our move, wait for opponent
+      phase = 'wait-online';
+      // Grow opponent's hexes (they'll grow ours on their side)
+      growPhaseOwner(opponentOwner());
+      turn++;
+      setStatus('🌐 Waiting for opponent…');
+      render();
+    }
   }
 
   // =========== POWER-UP EFFECTS ===========
@@ -807,32 +1250,32 @@ const HexAsteal = (function () {
       case 'shield':
         cell.shielded = true;
         flashHex(r, c, 'flash-shield flash-powerup', 600);
-        return '🛡 Shield! Needs +3 extra to capture';
+        return '🛡 Shield!';
       case 'drain': {
-        const foe = owner === PLAYER ? ENEMY : PLAYER;
+        const foes = [PLAYER, PLAYER2, ENEMY].filter(o => o !== owner);
         let drained = 0;
         for (const [nr, nc] of getNeighbors(r, c)) {
-          if (grid[nr][nc].owner === foe) {
+          if (foes.includes(grid[nr][nc].owner)) {
             const steal = Math.min(2, grid[nr][nc].power - 1);
             if (steal > 0) { grid[nr][nc].power -= steal; drained += steal; flashHex(nr, nc, 'flash-drain flash-powerup', 500); }
           }
         }
         cell.power = Math.min(cell.power + drained, MAX_POWER);
         flashHex(r, c, 'flash-drain flash-powerup', 600);
-        return `💀 Drain! Stole ${drained} power`;
+        return `💀 Drain! Stole ${drained}`;
       }
       case 'blaze':
         cell.blazeBuffed = true;
         flashHex(r, c, 'flash-blaze flash-powerup', 600);
-        return '🔥 Blaze! Next attack = 2× damage';
+        return '🔥 Blaze! 2×';
       case 'freeze': {
-        const foe = owner === PLAYER ? ENEMY : PLAYER;
+        const foes = [PLAYER, PLAYER2, ENEMY].filter(o => o !== owner);
         let froze = 0;
         for (const [nr, nc] of getNeighbors(r, c)) {
-          if (grid[nr][nc].owner === foe) { grid[nr][nc].frozen = true; froze++; flashHex(nr, nc, 'flash-freeze flash-powerup', 500); }
+          if (foes.includes(grid[nr][nc].owner)) { grid[nr][nc].frozen = true; froze++; flashHex(nr, nc, 'flash-freeze flash-powerup', 500); }
         }
         flashHex(r, c, 'flash-freeze flash-powerup', 600);
-        return `❄ Freeze! ${froze} foe hex${froze !== 1 ? 'es' : ''} frozen`;
+        return `❄ Froze ${froze}`;
       }
       case 'spread': {
         const neutralNeigh = getNeighbors(r, c).filter(([nr,nc]) => grid[nr][nc].owner === NEUTRAL);
@@ -843,9 +1286,9 @@ const HexAsteal = (function () {
           flashHex(nr, nc, 'flash-spread flash-powerup', 600);
           let extra = '';
           if (sPU) extra = ' → ' + applyPowerup(sPU, nr, nc, owner);
-          return '🌀 Spread! +1 neutral hex' + extra;
+          return '🌀 Spread!' + extra;
         }
-        return '🌀 Spread! (no neutral nearby)';
+        return '🌀 Spread! (no neutral)';
       }
       default: return '';
     }
@@ -860,19 +1303,18 @@ const HexAsteal = (function () {
   }
 
   // =========== GROWTH ===========
-  function growPhase(owner) {
+  function growPhaseOwner(owner) {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const cell = grid[r][c];
       if (cell.owner !== owner) continue;
       if (cell.frozen) { cell.frozen = false; flashHex(r, c, 'flash-freeze', 300); continue; }
       const gain = (cell.boss && cell.owner === ENEMY) ? cfg.bossRegen : 1;
-      if (cell.power < MAX_POWER) {
-        cell.power = Math.min(cell.power + gain, MAX_POWER);
-        flashHex(r, c, 'flash-grow', 300);
-        SFX.grow();
-      }
+      if (cell.power < MAX_POWER) { cell.power = Math.min(cell.power + gain, MAX_POWER); flashHex(r, c, 'flash-grow', 300); SFX.grow(); }
     }
   }
+
+  // Legacy: grow only PLAYER (used in AI mode)
+  function growPhase(owner) { growPhaseOwner(owner); }
 
   // =========== AI ===========
   function beginAITurn() {
@@ -892,15 +1334,11 @@ const HexAsteal = (function () {
         if (src.blazeBuffed) aPow = Math.min(aPow * 2, 18);
         let dPow = grid[nr][nc].power;
         if (grid[nr][nc].shielded) dPow += 3;
-        attacks.push({
-          sr: r, sc: c, dr: nr, dc: nc,
-          sPow: aPow, dPow, dOwner: grid[nr][nc].owner, dPU: grid[nr][nc].powerup
-        });
+        attacks.push({ sr:r, sc:c, dr:nr, dc:nc, sPow:aPow, dPow, dOwner:grid[nr][nc].owner, dPU:grid[nr][nc].powerup });
       }
     }
 
     let best = null, bestScore = -Infinity;
-    // AI difficulty scales with stage
     const aggression = Math.min(currentStage * 2, 40);
     for (const a of attacks) {
       let score = 0;
@@ -924,87 +1362,112 @@ const HexAsteal = (function () {
     if (best && bestScore > 50) {
       flashHex(best.sr, best.sc, 'flash-ai-source', 400);
       SFX.aiMove();
-
       setTimeout(() => {
         const src = grid[best.sr][best.sc], dst = grid[best.dr][best.dc];
         let aPow = src.power;
         const wasBlazed = src.blazeBuffed;
-        if (wasBlazed) { aPow = Math.min(aPow * 2, 18); src.blazeBuffed = false; }
+        if (wasBlazed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
         let dPow = dst.power;
         const wasShielded = dst.shielded;
         if (wasShielded) dPow += 3;
         const capPU = dst.powerup;
 
         if (aPow > dPow) {
-          dst.owner = ENEMY; dst.power = Math.min(aPow - dPow, MAX_POWER);
+          dst.owner = ENEMY; dst.power = Math.min(aPow-dPow, MAX_POWER);
           src.power = 1; dst.powerup = null; dst.shielded = false;
           dst.blazeBuffed = false; dst.frozen = false;
           flashHex(best.dr, best.dc, 'flash-ai-capture', 500);
           SFX.attack();
           let msg = `⚔️ Enemy captured! (${wasBlazed ? aPow+' 🔥' : aPow} vs ${wasShielded ? dPow+' 🛡' : dPow})`;
-          if (capPU) { msg += ' · ' + applyPowerup(capPU, best.dr, best.dc, ENEMY); }
+          if (capPU) msg += ' · ' + applyPowerup(capPU, best.dr, best.dc, ENEMY);
           setStatus(msg);
         } else if (aPow === dPow) {
-          src.power = Math.max(1, src.power - 1);
-          setStatus('⚔️ Enemy tied — deflected!');
+          src.power = Math.max(1, src.power-1);
+          setStatus('⚔️ Enemy tied!');
         } else {
-          src.power = 1; if (dst.power > 1) dst.power -= 1;
-          setStatus('⚔️ Enemy attack failed!');
+          src.power = 1; if (dst.power>1) dst.power-=1;
+          setStatus('⚔️ Enemy failed!');
         }
         render();
         setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 550);
       }, 400);
     } else {
-      setStatus('⚔️ Enemy skipped attack');
+      setStatus('⚔️ Enemy skipped');
       setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 350);
     }
   }
 
   // =========== TURN MANAGEMENT ===========
   function startNewTurn() {
-    turn++;
-    growPhase(PLAYER);
-    phase = 'select';
-
-    if (!playerHasAttacks()) {
+    turn++; growPhase(PLAYER); phase = 'select';
+    if (!playerHasAttacks(PLAYER)) {
       setStatus('No attacks available — skipping…');
       render();
       setTimeout(() => { if (!checkGameOver()) beginAITurn(); }, 500);
       return;
     }
-
     setStatus('Your hexes grew +1 · select a hex to attack or 🔄 transfer');
     render();
   }
 
-  function playerHasAttacks() {
+  function playerHasAttacks(owner) {
+    const o = owner || PLAYER;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
-      if (grid[r][c].owner === PLAYER && !grid[r][c].frozen &&
+      if (grid[r][c].owner === o && !grid[r][c].frozen &&
         (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0)) return true;
     return false;
   }
 
   // =========== WIN / LOSE ===========
   function checkGameOver() {
-    let hasP = false, hasE = false, pS = 0, eS = 0, pH = 0, eH = 0;
-    let hasBoss = false;
+    if (gameMode === 'local' || gameMode === 'online') return checkGameOverMP();
+    return checkGameOverAI();
+  }
+
+  function checkGameOverAI() {
+    let hasP = false, hasE = false, pS = 0, eS = 0, pH = 0, eH = 0, hasBoss = false;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const o = grid[r][c].owner;
       if (o === PLAYER) { hasP = true; pH++; pS += grid[r][c].power; }
       if (o === ENEMY)  { hasE = true; eH++; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
     }
-
-    // Boss killed check (already handled in executeAttack, but safety)
-    if (cfg.isBoss && !hasBoss && hasP) {
-      showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win');
+    if (cfg.isBoss && !hasBoss && hasP) { showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'); return true; }
+    if (!hasE) { showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'); return true; }
+    if (!hasP) { showEnd('Defeat', `Stage ${currentStage} — enemy took all your hexes.`, 'lose'); return true; }
+    if (turn >= cfg.maxTurns) {
+      if (pS > eS) showEnd('Victory!', `Time's up — you win! ⚡${pS} vs ⚡${eS}`, 'win');
+      else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡${eS} vs ⚡${pS}`, 'lose');
+      else showEnd('Draw', `Tied at ⚡${pS}!`, 'draw');
       return true;
     }
-    if (!hasE) { showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'); return true; }
-    if (!hasP) { showEnd('Defeat', `Stage ${currentStage} — the enemy took all your hexes.`, 'lose'); return true; }
+    return false;
+  }
+
+  function checkGameOverMP() {
+    let p1H=0, p2H=0, p1S=0, p2S=0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      if (cell.owner === PLAYER)  { p1H++; p1S += cell.power; }
+      if (cell.owner === PLAYER2) { p2H++; p2S += cell.power; }
+    }
+
+    // Names
+    const p1Name = gameMode === 'online' && onlineSide === PLAYER2 ? 'Opponent' : 'Player 1';
+    const p2Name = gameMode === 'online' && onlineSide === PLAYER  ? 'Opponent' : 'Player 2';
+    const myName = gameMode === 'online'
+      ? 'You'
+      : (localTurn === PLAYER ? 'Player 1' : 'Player 2');
+
+    if (p2H === 0) {
+      showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, 'win'); return true;
+    }
+    if (p1H === 0) {
+      showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, 'lose'); return true;
+    }
     if (turn >= cfg.maxTurns) {
-      if (pS > eS) showEnd('Victory!', `Time's up — you win! ${pH} hexes (⚡${pS}) vs ${eH} (⚡${eS})`, 'win');
-      else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ${eH} hexes (⚡${eS}) vs ${pH} (⚡${pS})`, 'lose');
-      else showEnd('Draw', `Time's up — tied at ⚡${pS}! (Counts as loss)`, 'lose');
+      if (p1S > p2S) showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name.includes('You') || gameMode==='local' ? 'win' : 'lose');
+      else if (p2S > p1S) showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name.includes('You') || (gameMode==='local') ? 'win' : 'lose');
+      else showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
       return true;
     }
     return false;
@@ -1018,21 +1481,26 @@ const HexAsteal = (function () {
 
     if (type === 'win') {
       SFX.victory();
-      stageWon();
-      if (currentStage >= TOTAL_STAGES) {
-        btnNext.textContent = '🏆 All Stages!';
-      } else {
-        btnNext.textContent = 'Next Stage →';
-      }
+      if (gameMode === 'ai') stageWon();
+      btnNext.textContent = gameMode === 'ai'
+        ? (currentStage >= TOTAL_STAGES ? '🏆 All Stages!' : 'Next Stage →')
+        : 'Play Again';
+      btnNext.classList.remove('hidden');
+    } else if (type === 'draw') {
+      SFX.defeat();
+      btnNext.textContent = 'Play Again';
       btnNext.classList.remove('hidden');
     } else {
       SFX.defeat();
-      btnNext.classList.add('hidden');
+      if (gameMode !== 'ai') {
+        btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
+      } else {
+        btnNext.classList.add('hidden');
+      }
     }
 
     goOverlay.classList.remove('hidden');
-    setStatus(title);
-    render();
+    setStatus(title); render();
   }
 
   // =========== HELPERS ===========
@@ -1043,15 +1511,28 @@ const HexAsteal = (function () {
     if (phase !== 'select' && phase !== 'target') return;
     SFX.click();
     selectedHex = null; validTargets = []; transferTargets = [];
-    setStatus('Skipped attack · enemy turn…');
+
+    if (gameMode === 'online') sendOnline({ type: 'skip' });
+
+    setStatus('Skipped…');
     render();
-    setTimeout(beginAITurn, 300);
+    setTimeout(() => {
+      if (gameMode === 'ai') beginAITurn();
+      else if (gameMode === 'local') {
+        localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
+        growPhaseOwner(localTurn); turn++;
+        phase = 'select'; render();
+        showLocalTurnBanner();
+      } else if (gameMode === 'online') {
+        phase = 'wait-online';
+        growPhaseOwner(opponentOwner()); turn++;
+        setStatus('🌐 Waiting for opponent…'); render();
+      }
+    }, 300);
   }
 
   function toggleSound() {
-    SFX.on = !SFX.on;
-    progress.soundOn = SFX.on;
-    saveProgress();
+    SFX.on = !SFX.on; progress.soundOn = SFX.on; saveProgress();
     btnSound.textContent = SFX.on ? '🔊' : '🔇';
     if (SFX.on) SFX.click();
   }
@@ -1070,8 +1551,10 @@ const HexAsteal = (function () {
     eHexesEl    = document.getElementById('e-hexes');
     ePowerEl    = document.getElementById('e-power');
     foeLabel    = document.getElementById('foe-label');
+    pLabel      = document.getElementById('p-label');
     btnSkip     = document.getElementById('btn-skip');
     btnSound    = document.getElementById('btn-sound');
+    enemyDot    = document.getElementById('enemy-dot');
 
     tutOverlay  = document.getElementById('tut-overlay');
     tutIcon     = document.getElementById('tut-icon');
@@ -1093,14 +1576,15 @@ const HexAsteal = (function () {
     btnNext     = document.getElementById('btn-next');
     btnRetry    = document.getElementById('btn-retry');
 
+    modeOverlay   = document.getElementById('mode-overlay');
+    onlineOverlay = document.getElementById('online-overlay');
+    localTurnBanner = document.getElementById('local-turn-banner');
+
     loadProgress();
     btnSound.textContent = SFX.on ? '🔊' : '🔇';
 
-    if (!progress.tutDone) {
-      showTutorial();
-    } else {
-      startStage(progress.stage);
-    }
+    if (!progress.tutDone) showTutorial();
+    else startStage(progress.stage);
   }
 
   document.addEventListener('DOMContentLoaded', init);
@@ -1108,6 +1592,10 @@ const HexAsteal = (function () {
   return {
     skipAttack, restartStage, nextStage, startBoss,
     showStages, closeStages, toggleSound,
-    nextTutorial, skipTutorial, replayTutorial
+    nextTutorial, skipTutorial, replayTutorial,
+    showModeSelect, closeModeSelect, selectMode,
+    onlineCreate, showJoinRoom, onlineJoin,
+    showCreateJoin, cancelOnline, copyRoomCode,
+    dismissLocalBanner
   };
 })();
