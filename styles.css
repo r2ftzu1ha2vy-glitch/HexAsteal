@@ -174,6 +174,17 @@ body {
 .hex-valid-target[class*="hex-powerup-"]:hover { fill: #323a4a; }
 .hex-valid-target.hex-enemy:hover { fill: #6e1515; }
 
+/* ---- Transfer Target ---- */
+.hex-transfer-target {
+  stroke: #38bdf8 !important; stroke-width: 2 !important;
+  stroke-dasharray: 4 3; cursor: pointer;
+  fill: #0c2e1f !important;
+}
+.hex-transfer-target:hover {
+  stroke-width: 2.5 !important; fill: #0f3d2a !important;
+  filter: url(#glow-player);
+}
+
 /* ---- Flash Animations ---- */
 .flash-capture    { fill: #4ade80 !important; stroke: #86efac !important; stroke-width: 2.5 !important; }
 .flash-fail       { fill: #991b1b !important; stroke: #fca5a5 !important; stroke-width: 2 !important; }
@@ -187,6 +198,8 @@ body {
 .flash-blaze      { fill: #f97316 !important; stroke: #fdba74 !important; }
 .flash-freeze     { fill: #7dd3fc !important; stroke: #bae6fd !important; }
 .flash-spread     { fill: #f472b6 !important; stroke: #f9a8d4 !important; }
+.flash-transfer-out { fill: #0ea5e9 !important; stroke: #38bdf8 !important; stroke-width: 2.5 !important; }
+.flash-transfer-in  { fill: #22c55e !important; stroke: #86efac !important; stroke-width: 2.5 !important; }
 .flash-grow              { stroke-width: 2.5 !important; }
 .flash-grow.hex-player   { stroke: #86efac !important; }
 .flash-grow.hex-enemy    { stroke: #fca5a5 !important; }
