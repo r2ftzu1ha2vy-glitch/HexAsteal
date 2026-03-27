@@ -1,9 +1,26 @@
-/* ===========================================
-   HEXASTEAL — Territory Conquest
-   Stages · Boss Battles · Power-Ups · Sounds
-   Multiplayer: vs AI · Local 2P · Online 2P
-   =========================================== */
+// =========== FIREBASE IMPORTS (add to top of game.js) ===========
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import { getDatabase, ref, set, update, onValue, off } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
+// =========== FIREBASE CONFIG (REPLACE WITH YOUR CONFIG) ===========
+const firebaseConfig = {
+  apiKey: "AIzaSyCzTi3UMtCQPm4kXdtAqOzv-zyt1HDsBqo",
+  authDomain: "hexasteal.firebaseapp.com",
+  projectId: "hexasteal",
+  databaseURL: "https://hexasteal-default-rtdb.firebaseio.com/",
+  storageBucket: "hexasteal.firebasestorage.app",
+  messagingSenderId: "390872116524",
+  appId: "1:390872116524:web:67fcc0a61b3f0a7ad8d089"
+};
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+
+// =========== GLOBAL FIREBASE VARIABLES ===========
+let dbRef = null;
+let roomCode = null;
+let lastSeenMsgId = null;
+let moveListener = null;
 const HexAsteal = (function () {
   'use strict';
 
