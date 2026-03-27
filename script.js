@@ -97,6 +97,11 @@ const HexAsteal = (function () {
     stageStart() {
       this.osc(440, 0.08, 'sine', 0.12);
       setTimeout(() => this.osc(660, 0.12, 'sine', 0.15), 70);
+    },
+    transfer() {
+      this.osc(440, 0.08, 'sine', 0.1);
+      setTimeout(() => this.osc(660, 0.08, 'sine', 0.1), 60);
+      setTimeout(() => this.osc(550, 0.1, 'sine', 0.12), 120);
     }
   };
 
@@ -105,7 +110,8 @@ const HexAsteal = (function () {
     { icon: '⬡', title: 'Welcome to HexAsteal!', text: 'A turn-based hex territory conquest game. Outsmart the enemy, capture power-ups, and conquer the board!' },
     { icon: '🟢', title: 'Your Territory', text: 'Green hexes are yours. Each shows a power level (1–9). Grow your army and dominate!' },
     { icon: '👆', title: 'Select & Attack', text: 'Click one of your hexes, then click an adjacent enemy or neutral hex to attack it.' },
-    { icon: '⚔️', title: 'Power Wins', text: 'Your power must be HIGHER than the target. Winner keeps the difference. Loser drops to 1.' },
+    { icon: '🔄', title: 'Transfer Power', text: 'Click your hex, then an adjacent friendly hex to give it power. Source keeps 1, target gains the rest (max 9). Great for powering up front-line hexes!' },
+    { icon: '⚔️', title: 'Power Wins', text: 'Your power must be HIGHER than the target. Winner keeps the difference. Equal power? Attacker just loses 1 — ties are deflected!' },
     { icon: '📈', title: 'Growth Phase', text: 'Every turn, all your hexes gain +1 power (max 9). Build up before striking!' },
     { icon: '🎨', title: 'Power-Ups!', text: 'Colored hexes have power-ups: Surge (+3), Shield, Drain, Blaze (2×), Freeze, and Spread. Race the AI to grab them!' },
     { icon: '▲', title: 'Mountains', text: 'Dark hexes with ▲ are impassable. Use them as cover and chokepoints!' },
@@ -158,7 +164,7 @@ const HexAsteal = (function () {
 
   // =========== STATE ===========
   let grid = [], turn = 1, phase = 'select';
-  let selectedHex = null, validTargets = [], hexEls = {};
+  let selectedHex = null, validTargets = [], transferTargets = [], hexEls = {};
   let animating = false, currentStage = 1, cfg = stageConfig(1), tutStep = 0;
 
   // =========== DOM REFS ===========
@@ -189,6 +195,12 @@ const HexAsteal = (function () {
   function getAttackTargets(r, c) {
     return getNeighbors(r, c).filter(
       ([nr, nc]) => grid[nr][nc].owner !== grid[r][c].owner
+    );
+  }
+  function getTransferTargets(r, c) {
+    if (grid[r][c].power <= 1) return [];
+    return getNeighbors(r, c).filter(
+      ([nr, nc]) => grid[nr][nc].owner === grid[r][c].owner
     );
   }
 
@@ -413,7 +425,9 @@ const HexAsteal = (function () {
 
         if (selectedHex && selectedHex[0] === r && selectedHex[1] === c) cls += ' hex-selected';
         else if (isValidTarget(r, c)) cls += ' hex-valid-target';
-        else if (phase === 'select' && cell.owner === PLAYER && !cell.frozen && getAttackTargets(r, c).length > 0)
+        else if (isTransferTarget(r, c)) cls += ' hex-transfer-target';
+        else if (phase === 'select' && cell.owner === PLAYER && !cell.frozen &&
+          (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0))
           cls += ' hex-selectable';
 
         el.polygon.setAttribute('class', cls);
@@ -449,6 +463,9 @@ const HexAsteal = (function () {
 
   function isValidTarget(r, c) {
     return validTargets.some(([vr, vc]) => vr === r && vc === c);
+  }
+  function isTransferTarget(r, c) {
+    return transferTargets.some(([vr, vc]) => vr === r && vc === c);
   }
 
   function updateHUD() {
@@ -608,7 +625,7 @@ const HexAsteal = (function () {
     render();
     setStatus(cfg.isBoss
       ? `⚔️ Boss battle! Defeat the ${cfg.bossName} hex to win!`
-      : 'Your hexes grew +1 · select a hex to attack from');
+      : 'Your hexes grew +1 · select a hex to attack or 🔄 transfer');
   }
 
   function stageWon() {
@@ -656,11 +673,13 @@ const HexAsteal = (function () {
       if (cell.owner !== PLAYER) return;
       if (cell.frozen) { setStatus('❄ That hex is frozen — can\'t attack this turn.'); SFX.fail(); return; }
       const targets = getAttackTargets(r, c);
-      if (targets.length === 0) { setStatus('No valid targets from that hex.'); return; }
-      selectedHex = [r, c]; validTargets = targets; phase = 'target';
+      const transfers = getTransferTargets(r, c);
+      if (targets.length === 0 && transfers.length === 0) { setStatus('No valid targets from that hex.'); return; }
+      selectedHex = [r, c]; validTargets = targets; transferTargets = transfers; phase = 'target';
       SFX.select();
       const bNote = cell.blazeBuffed ? ' 🔥 Blaze active — 2× damage!' : '';
-      setStatus(`Power ${cell.power} selected · choose target${bNote}`);
+      const tNote = transfers.length > 0 ? ' · 🔄 friendly = transfer' : '';
+      setStatus(`Power ${cell.power} selected · choose target${bNote}${tNote}`);
       render();
       return;
     }
@@ -668,13 +687,18 @@ const HexAsteal = (function () {
     if (phase === 'target') {
       if (cell.owner === PLAYER) {
         if (r === selectedHex[0] && c === selectedHex[1]) { deselect(); return; }
+        // Transfer to adjacent friendly hex
+        if (isTransferTarget(r, c)) { executeTransfer(selectedHex[0], selectedHex[1], r, c); return; }
+        // Re-select a different hex
         if (cell.frozen) { setStatus('❄ Frozen hex.'); SFX.fail(); return; }
         const targets = getAttackTargets(r, c);
-        if (targets.length === 0) { setStatus('No targets from that hex.'); return; }
-        selectedHex = [r, c]; validTargets = targets;
+        const transfers = getTransferTargets(r, c);
+        if (targets.length === 0 && transfers.length === 0) { setStatus('No targets from that hex.'); return; }
+        selectedHex = [r, c]; validTargets = targets; transferTargets = transfers;
         SFX.select();
         const bNote = cell.blazeBuffed ? ' 🔥 2×!' : '';
-        setStatus(`Power ${cell.power} selected · choose target${bNote}`);
+        const tNote = transfers.length > 0 ? ' · 🔄 transfer' : '';
+        setStatus(`Power ${cell.power} selected · choose target${bNote}${tNote}`);
         render(); return;
       }
       if (!isValidTarget(r, c)) return;
@@ -683,10 +707,33 @@ const HexAsteal = (function () {
   }
 
   function deselect() {
-    selectedHex = null; validTargets = []; phase = 'select';
+    selectedHex = null; validTargets = []; transferTargets = []; phase = 'select';
     SFX.deselect();
-    setStatus('Select one of your hexes to attack from');
+    setStatus('Select a hex to attack or 🔄 transfer power');
     render();
+  }
+
+  // =========== TRANSFER ===========
+  function executeTransfer(sr, sc, dr, dc) {
+    animating = true;
+    const src = grid[sr][sc], dst = grid[dr][dc];
+    const amount = src.power - 1;
+    if (amount <= 0) { animating = false; setStatus('Not enough power to transfer.'); SFX.fail(); return; }
+    const actual = Math.min(amount, MAX_POWER - dst.power);
+    if (actual <= 0) { animating = false; setStatus('Target hex is already at max power.'); SFX.fail(); return; }
+    src.power -= actual;
+    dst.power += actual;
+    SFX.transfer();
+    flashHex(sr, sc, 'flash-transfer-out', 400);
+    flashHex(dr, dc, 'flash-transfer-in', 400);
+    setStatus(`🔄 Transferred ${actual} power`);
+    selectedHex = null; validTargets = []; transferTargets = [];
+    render();
+    setTimeout(() => {
+      animating = false;
+      if (checkGameOver()) return;
+      beginAITurn();
+    }, 500);
   }
 
   // =========== COMBAT ===========
@@ -720,17 +767,21 @@ const HexAsteal = (function () {
       if (wasBoss) msg = `💀 ${cfg.bossName} DESTROYED! ${msg}`;
       if (capturedPU) { SFX.powerup(); msg += ' · ' + applyPowerup(capturedPU, dr, dc, PLAYER); }
       setStatus(msg);
+    } else if (atkPow === defPow) {
+      // Tie — attacker loses 1 power, defender untouched
+      src.power = Math.max(1, src.power - 1);
+      flashHex(sr, sc, 'flash-fail', 550);
+      SFX.fail();
+      setStatus(`⚔️ Tied ${atkPow} vs ${defPow} — deflected! Power → ${src.power}`);
     } else {
       src.power = 1;
       if (dst.power > 1) dst.power -= 1;
       flashHex(sr, sc, 'flash-fail', 550);
       SFX.fail();
-      setStatus(atkPow === defPow
-        ? `⚔️ Tied ${atkPow} vs ${defPow} — deflected`
-        : `❌ Failed ${wasBlazed ? atkPow+' (🔥2×)' : atkPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`);
+      setStatus(`❌ Failed ${wasBlazed ? atkPow+' (🔥2×)' : atkPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`);
     }
 
-    selectedHex = null; validTargets = [];
+    selectedHex = null; validTargets = []; transferTargets = [];
     render();
 
     setTimeout(() => {
@@ -893,6 +944,9 @@ const HexAsteal = (function () {
           let msg = `⚔️ Enemy captured! (${wasBlazed ? aPow+' 🔥' : aPow} vs ${wasShielded ? dPow+' 🛡' : dPow})`;
           if (capPU) { msg += ' · ' + applyPowerup(capPU, best.dr, best.dc, ENEMY); }
           setStatus(msg);
+        } else if (aPow === dPow) {
+          src.power = Math.max(1, src.power - 1);
+          setStatus('⚔️ Enemy tied — deflected!');
         } else {
           src.power = 1; if (dst.power > 1) dst.power -= 1;
           setStatus('⚔️ Enemy attack failed!');
@@ -919,13 +973,14 @@ const HexAsteal = (function () {
       return;
     }
 
-    setStatus('Your hexes grew +1 · select a hex to attack');
+    setStatus('Your hexes grew +1 · select a hex to attack or 🔄 transfer');
     render();
   }
 
   function playerHasAttacks() {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
-      if (grid[r][c].owner === PLAYER && !grid[r][c].frozen && getAttackTargets(r, c).length > 0) return true;
+      if (grid[r][c].owner === PLAYER && !grid[r][c].frozen &&
+        (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0)) return true;
     return false;
   }
 
@@ -987,7 +1042,7 @@ const HexAsteal = (function () {
   function skipAttack() {
     if (phase !== 'select' && phase !== 'target') return;
     SFX.click();
-    selectedHex = null; validTargets = [];
+    selectedHex = null; validTargets = []; transferTargets = [];
     setStatus('Skipped attack · enemy turn…');
     render();
     setTimeout(beginAITurn, 300);
