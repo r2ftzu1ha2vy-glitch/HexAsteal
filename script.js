@@ -834,32 +834,47 @@ const HexAsteal = (function () {
     });
   }
 
-  function startOnlineMoveListener() {
-    if (!gunRoom) return;
-    const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-    gunRoom.get(myKey).on((data) => {
-      if (!data || !data.msgId) return;
-      if (data.msgId === lastSeenMsgId) return;
-      lastSeenMsgId = data.msgId;
-      // Only process if it's the opponent's move (not a stale echo)
-      if (phase !== 'wait-online' && data.type !== 'start') return;
-      handleOnlineMessage(data);
-    });
-  }
+function startOnlineMoveListener() {
+  if (!gunRoom) return;
+  const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+  gunRoom.get(myKey).on((data) => {
+    if (!data || !data.msgId) return;
+    if (data.msgId === lastSeenMsgId) return;
 
-  function sendOnline(msg) {
-    if (!gunRoom) return;
-    const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
-    const payload = Object.assign({}, msg, { msgId: Date.now() + '_' + Math.random(), sender: onlineSide });
-    gunRoom.get(myKey).put(payload);
-  }
+    const isOpponent = data.sender && data.sender !== onlineSide;
+    if (!isOpponent) return;
 
-  function handleOnlineMessage(data) {
-    if (!data || !data.type) return;
-    if (data.sender === onlineSide) return; // ignore own echoes
-    if (data.type === 'move') applyRemoteMove(data.move);
-    else if (data.type === 'skip') applyRemoteSkip();
+    lastSeenMsgId = data.msgId;
+    handleOnlineMessage(data);
+  });
+}
+
+function sendOnline(msg) {
+  if (!gunRoom) return;
+  const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  const payload = Object.assign({}, msg, {
+    msgId,
+    sender: onlineSide,
+    turn,
+    ts: Date.now()
+  });
+  gunRoom.get(myKey).put(payload);
+}
+
+function handleOnlineMessage(data) {
+  if (!data || !data.type) return;
+  if (data.sender === onlineSide) return;
+
+  if (data.type === 'move') {
+    if (phase !== 'wait-online') return;
+    applyRemoteMove(data.move);
   }
+  else if (data.type === 'skip') {
+    if (phase !== 'wait-online') return;
+    applyRemoteSkip();
+  }
+}
 
   // seeded random for sync
   let _rngSeed = 0;
@@ -868,30 +883,32 @@ const HexAsteal = (function () {
     return Math.abs(_rngSeed) % n;
   }
 
-  function startOnlineGame(isHost, seed) {
-    gameMode = 'online';
-    cfg = mpConfig();
-    hideAllOverlays();
-    turn = 1; phase = 'select';
-    selectedHex = null; validTargets = []; transferTargets = []; animating = false;
+function startOnlineGame(isHost, seed) {
+  gameMode = 'online';
+  cfg = mpConfig();
+  hideAllOverlays();
+  turn = 1; 
+  phase = 'select';
+  selectedHex = null; 
+  validTargets = []; 
+  transferTargets = []; 
+  animating = false;
 
-    const useSeed = seed || (Date.now() & 0xffff);
-    generateMapSeeded(useSeed);
-    createBoard();
-    growPhaseOwner(PLAYER);
-    growPhaseOwner(PLAYER2);
+  const useSeed = seed || (Date.now() & 0xffff);
+  generateMapSeeded(useSeed);
+  createBoard();
 
-    SFX.stageStart();
-    render();
+  SFX.stageStart();
+  render();
 
-    if (onlineSide === PLAYER) {
-      setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
-    } else {
-      phase = 'wait-online';
-      setStatus('🌐 Waiting for P1 to move…');
-    }
-    render();
+  if (onlineSide === PLAYER) {
+    setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
+  } else {
+    phase = 'wait-online';
+    setStatus('🌐 Waiting for P1 to move…');
   }
+  render();
+}
 
   // Map generation using seeded random
   function generateMapSeeded(seed) {
@@ -978,14 +995,14 @@ const HexAsteal = (function () {
     afterOpponentTurn();
   }
 
-  function afterOpponentTurn() {
-    turn++;
-    growPhaseOwner(onlineSide);
-    phase = 'select';
-    const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
-    setStatus(`🌐 Your turn (${label}) — select a hex`);
-    render();
-  }
+function afterOpponentTurn() {
+  turn++;
+  growPhaseOwner(onlineSide);
+  phase = 'select';
+  const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
+  setStatus(`🌐 Your turn (${label}) — select a hex`);
+  render();
+}
 
   function sendMove(moveData) {
     sendOnline({ type: 'move', move: moveData });
@@ -1217,28 +1234,24 @@ const HexAsteal = (function () {
   }
 
   // Called after the active player takes their action
-  function afterPlayerTurn() {
-    if (gameMode === 'ai') {
-      beginAITurn();
-    } else if (gameMode === 'local') {
-      // Switch local turn
-      localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
-      // Grow the NEXT player's hexes
-      growPhaseOwner(localTurn);
-      turn++;
-      phase = 'select';
-      render();
-      showLocalTurnBanner();
-    } else if (gameMode === 'online') {
-      // After sending our move, wait for opponent
-      phase = 'wait-online';
-      // Grow opponent's hexes (they'll grow ours on their side)
-      growPhaseOwner(opponentOwner());
-      turn++;
-      setStatus('🌐 Waiting for opponent…');
-      render();
-    }
+function afterPlayerTurn() {
+  if (gameMode === 'ai') {
+    beginAITurn();
+  } else if (gameMode === 'local') {
+    localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
+    growPhaseOwner(localTurn);
+    turn++;
+    phase = 'select';
+    render();
+    showLocalTurnBanner();
+  } else if (gameMode === 'online') {
+    phase = 'wait-online';
+    growPhaseOwner(onlineSide);
+    turn++;
+    setStatus('🌐 Waiting for opponent…');
+    render();
   }
+}
 
   // =========== POWER-UP EFFECTS ===========
   function applyPowerup(type, r, c, owner) {
