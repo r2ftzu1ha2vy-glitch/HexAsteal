@@ -860,11 +860,14 @@ function startOnlineMoveListener() {
     const isOpponent = data.sender && data.sender !== onlineSide;
     if (!isOpponent) return;
 
-    // ✅ NEW: Validate turn number
     if (data.turn !== turn) {
-      console.warn('Turn mismatch:', data.turn, 'vs', turn);
-      return;
-    }
+  console.warn('Turn mismatch - ignoring message');
+  return;
+}
+if (phase !== 'wait-online') {
+  console.warn('Wrong phase for opponent move');
+  return;
+}
 
     lastSeenMsgId = data.msgId;
     handleOnlineMessage(data);
@@ -1053,8 +1056,11 @@ function startOnlineGame(isHost, seed) {
       const capPU = dst.powerup;
       if (aPow > dPow) {
         dst.owner = src.owner; dst.power = Math.min(aPow-dPow, MAX_POWER);
-        src.power = 1; dst.powerup = null; dst.shielded = false;
-        dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
+        src.power = 1; dst.powerup = null;
+dst.shielded = false;
+dst.blazeBuffed = false;
+dst.frozen = false;
+dst.boss = false;
         flashHex(move.dr, move.dc, onlineSide === PLAYER ? 'flash-ai-capture' : 'flash-capture', 550);
         SFX.attack();
         if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
