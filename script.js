@@ -21,6 +21,8 @@ let dbRef = null;
 let roomCode = null;
 let lastSeenMsgId = null;
 let moveListener = null;
+let statusListener = null;
+let roomListener = null;
 const HexAsteal = (function () {
   'use strict';
 
@@ -753,126 +755,168 @@ const HexAsteal = (function () {
   }
 
   function onlineCreate() {
-    SFX.click();
-    document.getElementById('online-create-join').classList.add('hidden');
-    document.getElementById('online-waiting').classList.remove('hidden');
-    document.getElementById('online-back-btn').style.display = 'none';
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-waiting').classList.remove('hidden');
 
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    onlineRoomCode = code;
-    document.getElementById('room-code-big').textContent = code;
-    document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  roomCode = code;
+  document.getElementById('room-code-big').textContent = code;
 
-    cleanupOnline();
-    loadGun(() => {
-      initGun();
-      onlineSide = PLAYER;
-      const roomKey = 'hexasteal_room_' + code;
-      gunRoom = gun.get(roomKey);
+  onlineSide = PLAYER;
+  dbRef = ref(database, `rooms/${code}`);
+  
+  set(dbRef, {
+    status: 'waiting',
+    seed: 0,
+    p1: onlineSide,
+    ts: Date.now()
+  }).catch(err => console.error('Create room error:', err));
+  
+  // ✅ Store listener reference for cleanup
+  const statusRef = ref(database, `rooms/${code}/status`);
+  statusListener = onValue(statusRef, (snapshot) => {
+    const status = snapshot.val();
+    if (status === 'joined' && onlineSide === PLAYER) {
+      const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+      update(ref(database, `rooms/${code}`), { status: 'started', seed });
+      
+      document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
+      
+      setTimeout(() => {
+        // ✅ Clean up this listener before starting
+        if (statusListener) off(statusRef);
+        statusListener = null;
+        
+        document.getElementById('online-overlay').classList.add('hidden');
+        startOnlineGame(true, seed);
+        startOnlineMoveListener();
+      }, 600);
+    }
+  });
+}
 
-      // Write initial room state
-      gunRoom.get('state').put({ status: 'waiting', seed: 0, ts: Date.now() });
-
-      // Watch for guest joining
-      gunRoom.get('state').on((data) => {
-        if (!data) return;
-        if (data.status === 'joined' && onlineSide === PLAYER && !onlineReady) {
-          onlineReady = true;
-          const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
-          gunRoom.get('state').put({ status: 'started', seed, ts: Date.now() });
-          document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
-          setTimeout(() => {
-            onlineOverlay.classList.add('hidden');
-            startOnlineGame(true, seed);
-          }, 600);
-        }
-      });
-
-      // Listen for moves from opponent
-      startOnlineMoveListener();
-    });
+function onlineJoin() {
+  SFX.click();
+  const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
+  
+  if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+    setOnlineStatus('Enter all 4 digits.', 'error');
+    return;
   }
 
-  function onlineJoin() {
-    SFX.click();
-    const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
-    if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-      setOnlineStatus('Enter all 4 digits.', 'error'); return;
+  roomCode = code;
+  onlineSide = PLAYER2;
+  dbRef = ref(database, `rooms/${code}`);
+
+  let joinTimeout = setTimeout(() => {
+    setOnlineStatus('Room not found. Check code.', 'error');
+  }, 10000);
+
+  const roomRef = ref(database, `rooms/${code}`);
+  
+  // ✅ Store listener reference
+  roomListener = onValue(roomRef, (snapshot) => {
+    const data = snapshot.val();
+    
+    if (!data) {
+      clearTimeout(joinTimeout);
+      setOnlineStatus('Room not found.', 'error');
+      if (roomListener) off(roomRef);
+      roomListener = null;
+      return;
     }
 
-    document.getElementById('online-join-form').classList.add('hidden');
-    document.getElementById('online-connecting').classList.remove('hidden');
-    document.getElementById('online-back-btn').style.display = 'none';
-    document.getElementById('online-connecting').innerHTML =
-      '<p class="mode-sub">Connecting to room ' + code + '…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
+    clearTimeout(joinTimeout);
+    
+    update(ref(database, `rooms/${code}`), { status: 'joined' }).catch(err => 
+      console.error('Join error:', err)
+    );
 
-    onlineRoomCode = code;
-    cleanupOnline();
-
-    loadGun(() => {
-      initGun();
-      onlineSide = PLAYER2;
-      const roomKey = 'hexasteal_room_' + code;
-      gunRoom = gun.get(roomKey);
-
-      // Check room exists then signal join
-      let joinTimeout = setTimeout(() => {
-        document.getElementById('online-connecting').innerHTML =
-          '<p class="mode-sub" style="color:#f87171">Room not found. Check the code.</p>';
-        document.getElementById('online-back-btn').style.display = '';
-      }, 10000);
-
-      gunRoom.get('state').once((data) => {
-        if (!data || (data.status !== 'waiting' && data.status !== 'joined')) {
-          clearTimeout(joinTimeout);
-          document.getElementById('online-connecting').innerHTML =
-            '<p class="mode-sub" style="color:#f87171">Room not found or already started.</p>';
-          document.getElementById('online-back-btn').style.display = '';
-          return;
-        }
-        clearTimeout(joinTimeout);
-        // Signal that we've joined
-        gunRoom.get('state').put({ status: 'joined', seed: 0, ts: Date.now() });
-        document.getElementById('online-connecting').innerHTML =
-          '<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
-
-        // Wait for host to start
-        gunRoom.get('state').on((d) => {
-          if (!d) return;
-          if (d.status === 'started' && onlineSide === PLAYER2 && !onlineReady) {
-            onlineReady = true;
-            onlineOverlay.classList.add('hidden');
-            startOnlineGame(false, d.seed);
-          }
-        });
-      });
-
+    if (data.status === 'started') {
+      // ✅ Clean up this listener before starting
+      if (roomListener) off(roomRef);
+      roomListener = null;
+      
+      document.getElementById('online-overlay').classList.add('hidden');
+      startOnlineGame(false, data.seed);
       startOnlineMoveListener();
-    });
-  }
+    }
+  });
+}
 
 function startOnlineMoveListener() {
-  if (!dbRef) return;
+  if (!dbRef || !roomCode) return;
   
   const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
   const moveRef = ref(database, `rooms/${roomCode}/${myKey}`);
   
+  // ✅ Store listener reference for cleanup
   moveListener = onValue(moveRef, (snapshot) => {
     const data = snapshot.val();
-    
     if (!data || !data.msgId) return;
     if (data.msgId === lastSeenMsgId) return;
 
     const isOpponent = data.sender && data.sender !== onlineSide;
     if (!isOpponent) return;
 
+    // ✅ NEW: Validate turn number
+    if (data.turn !== turn) {
+      console.warn('Turn mismatch:', data.turn, 'vs', turn);
+      return;
+    }
+
     lastSeenMsgId = data.msgId;
     handleOnlineMessage(data);
   });
 }
 
+// =========== FIX: CANCEL ONLINE ===========
+function cancelOnline() {
+  SFX.click();
+  
+  // ✅ Clean up all listeners properly
+  if (statusListener && roomCode) {
+    try {
+      off(ref(database, `rooms/${roomCode}/status`));
+    } catch (e) {}
+    statusListener = null;
+  }
+  
+  if (roomListener && roomCode) {
+    try {
+      off(ref(database, `rooms/${roomCode}`));
+    } catch (e) {}
+    roomListener = null;
+  }
+  
+  if (moveListener && roomCode) {
+    try {
+      const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+      off(ref(database, `rooms/${roomCode}/${myKey}`));
+    } catch (e) {}
+    moveListener = null;
+  }
+  
+  // ✅ Delete room if we're the creator
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(err => 
+      console.error('Delete error:', err)
+    );
+  }
+  
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  
+  document.getElementById('online-overlay').classList.add('hidden');
+  if (gameMode === 'online') gameMode = 'ai';
+}
 function sendOnline(msg) {
-  if (!dbRef) return;
+  if (!dbRef || !roomCode) {
+    console.error('No active room');
+    return;
+  }
   
   const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
   const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
@@ -887,20 +931,28 @@ function sendOnline(msg) {
   };
   
   update(ref(database, `rooms/${roomCode}/${myKey}`), payload).catch(err => {
-    console.error('Firebase send error:', err);
+    console.error('Send move error:', err);
+    setStatus('⚠️ Connection error. Retrying…');
   });
 }
+
 
 function handleOnlineMessage(data) {
   if (!data || !data.type) return;
   if (data.sender === onlineSide) return;
 
   if (data.type === 'move') {
-    if (phase !== 'wait-online') return;
+    if (phase !== 'wait-online') {
+      console.warn('Wrong phase for move:', phase);
+      return;
+    }
     applyRemoteMove(data.move);
   }
   else if (data.type === 'skip') {
-    if (phase !== 'wait-online') return;
+    if (phase !== 'wait-online') {
+      console.warn('Wrong phase for skip:', phase);
+      return;
+    }
     applyRemoteSkip();
   }
 }
