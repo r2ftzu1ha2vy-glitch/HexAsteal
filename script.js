@@ -1411,7 +1411,7 @@ function afterPlayerTurn() {
         showLocalTurnBanner();
       } else if (gameMode === 'online') {
         phase = 'wait-online';
-        growPhaseOwner(opponentOwner()); turn++;
+        growPhaseOwner(onlineSide); turn++;
         setStatus('🌐 Waiting for opponent…'); render();
       }
     }, 300);
