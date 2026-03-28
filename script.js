@@ -19,10 +19,11 @@ const database = getDatabase(app);
 // =========== GLOBAL FIREBASE VARIABLES ===========
 let dbRef = null;
 let roomCode = null;
-let lastSeenMsgId = null;
+let onlineSide = PLAYER;        // PLAYER (host) or PLAYER2 (guest)
 let moveListener = null;
 let statusListener = null;
 let roomListener = null;
+let lastSeenMsgId = null;
 const HexAsteal = (function () {
   'use strict';
 
@@ -718,155 +719,152 @@ const HexAsteal = (function () {
     });
   }
 
-  function showOnlineLobby() {
-    onlineOverlay.classList.remove('hidden');
-    showCreateJoin();
-  }
+function showOnlineLobby() {
+  onlineOverlay.classList.remove('hidden');
+  showCreateJoin();
+}
 
-  function showCreateJoin() {
-    document.getElementById('online-create-join').classList.remove('hidden');
-    document.getElementById('online-join-form').classList.add('hidden');
-    document.getElementById('online-waiting').classList.add('hidden');
-    document.getElementById('online-connecting').classList.add('hidden');
-    document.getElementById('online-back-btn').style.display = '';
-  }
+function showCreateJoin() {
+  document.getElementById('online-create-join').classList.remove('hidden');
+  document.getElementById('online-join-form').classList.add('hidden');
+  document.getElementById('online-waiting').classList.add('hidden');
+  document.getElementById('online-connecting').classList.add('hidden');
+  document.getElementById('online-back-btn').style.display = '';
+}
 
-  function showJoinRoom() {
-    SFX.click();
-    document.getElementById('online-create-join').classList.add('hidden');
-    document.getElementById('online-join-form').classList.remove('hidden');
-    document.getElementById('online-back-btn').style.display = '';
-    setTimeout(() => document.getElementById('cd0').focus(), 100);
-    setupCodeInputs();
-  }
+function showJoinRoom() {
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-join-form').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = '';
+  setupCodeInputs();
+  setTimeout(() => document.getElementById('cd0').focus(), 50);
+}
 
-  function setupCodeInputs() {
-    for (let i = 0; i < 4; i++) {
-      const el = document.getElementById(`cd${i}`);
-      el.value = '';
-      el.oninput = () => {
-        el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
-        if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
-      };
-      el.onkeydown = (e) => {
-        if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
-      };
-    }
+function setupCodeInputs() {
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById(`cd${i}`);
+    el.value = '';
+    el.oninput = () => {
+      el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
+      if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
+    };
+    el.onkeydown = (e) => {
+      if (e.key === 'Backspace' && !el.value && i > 0) {
+        document.getElementById(`cd${i-1}`).focus();
+      }
+    };
   }
-
-  function onlineCreate() {
+}
+function onlineCreate() {
   SFX.click();
   document.getElementById('online-create-join').classList.add('hidden');
   document.getElementById('online-waiting').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = 'none';
 
   const code = String(Math.floor(1000 + Math.random() * 9000));
   roomCode = code;
-  document.getElementById('room-code-big').textContent = code;
-
   onlineSide = PLAYER;
+
+  document.getElementById('room-code-big').textContent = code;
+  document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+
+  // FIXED: Generate seed immediately so both players get identical map
+  const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+
   dbRef = ref(database, `rooms/${code}`);
-  
+
   set(dbRef, {
     status: 'waiting',
-    seed: 0,
-    p1: onlineSide,
-    ts: Date.now()
-  }).catch(err => console.error('Create room error:', err));
-  
-  // ✅ Store listener reference for cleanup
+    seed: seed,                    // Seed is set at creation
+    createdAt: Date.now()
+  }).catch(err => {
+    console.error('Create room error:', err);
+    setOnlineStatus('Failed to create room. Check connection.', 'error');
+  });
+
+  // Listen for opponent joining
   const statusRef = ref(database, `rooms/${code}/status`);
   statusListener = onValue(statusRef, (snapshot) => {
-    const status = snapshot.val();
-    if (status === 'joined' && onlineSide === PLAYER) {
-      const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
-      update(ref(database, `rooms/${code}`), { status: 'started', seed });
-      
-      document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
-      
+    if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
+      update(dbRef, { status: 'started' }).catch(console.error);
+
+      document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+
       setTimeout(() => {
-        // ✅ Clean up this listener before starting
-        if (statusListener) off(statusRef);
-        statusListener = null;
-        
+        cleanupListeners();
         document.getElementById('online-overlay').classList.add('hidden');
         startOnlineGame(true, seed);
         startOnlineMoveListener();
-      }, 600);
+      }, 700);
     }
   });
 }
 
+// =========== JOIN ROOM (Guest) ===========
 function onlineJoin() {
   SFX.click();
   const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
-  
+
   if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-    setOnlineStatus('Enter all 4 digits.', 'error');
+    setOnlineStatus('Enter a valid 4-digit code.', 'error');
     return;
   }
+
+  document.getElementById('online-join-form').classList.add('hidden');
+  const connectingEl = document.getElementById('online-connecting');
+  connectingEl.classList.remove('hidden');
+  connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
 
   roomCode = code;
   onlineSide = PLAYER2;
   dbRef = ref(database, `rooms/${code}`);
 
   let joinTimeout = setTimeout(() => {
-    setOnlineStatus('Room not found. Check code.', 'error');
-  }, 10000);
+    connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found or expired.</p>`;
+    document.getElementById('online-back-btn').style.display = '';
+  }, 12000);
 
-  const roomRef = ref(database, `rooms/${code}`);
-  
-  // ✅ Store listener reference
-  roomListener = onValue(roomRef, (snapshot) => {
+  roomListener = onValue(dbRef, (snapshot) => {
     const data = snapshot.val();
-    
     if (!data) {
       clearTimeout(joinTimeout);
-      setOnlineStatus('Room not found.', 'error');
-      if (roomListener) off(roomRef);
-      roomListener = null;
+      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found.</p>`;
       return;
     }
-
     clearTimeout(joinTimeout);
-    
-    update(ref(database, `rooms/${code}`), { status: 'joined' }).catch(err => 
-      console.error('Join error:', err)
-    );
+
+    if (data.status === 'waiting') {
+      update(dbRef, { status: 'joined' }).catch(console.error);
+      connectingEl.innerHTML = `<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+    }
 
     if (data.status === 'started') {
-      // ✅ Clean up this listener before starting
-      if (roomListener) off(roomRef);
-      roomListener = null;
-      
+      cleanupListeners();
       document.getElementById('online-overlay').classList.add('hidden');
-      startOnlineGame(false, data.seed);
+      startOnlineGame(false, data.seed);   // Same seed as host
       startOnlineMoveListener();
     }
   });
 }
-
 function startOnlineMoveListener() {
   if (!dbRef || !roomCode) return;
-  
-  const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-  const moveRef = ref(database, `rooms/${roomCode}/${myKey}`);
-  
-  // ✅ Store listener reference for cleanup
+
+  const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+  const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
+
   moveListener = onValue(moveRef, (snapshot) => {
     const data = snapshot.val();
-    if (!data || !data.msgId) return;
-    if (data.msgId === lastSeenMsgId) return;
+    if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
+    if (data.sender === onlineSide) return;
 
-    const isOpponent = data.sender && data.sender !== onlineSide;
-    if (!isOpponent) return;
+    lastSeenMsgId = data.msgId;
 
-    // ✅ NEW: Validate turn number
     if (data.turn !== turn) {
       console.warn('Turn mismatch:', data.turn, 'vs', turn);
       return;
     }
 
-    lastSeenMsgId = data.msgId;
     handleOnlineMessage(data);
   });
 }
@@ -913,27 +911,22 @@ function cancelOnline() {
   if (gameMode === 'online') gameMode = 'ai';
 }
 function sendOnline(msg) {
-  if (!dbRef || !roomCode) {
-    console.error('No active room');
-    return;
-  }
-  
-  const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
-  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  
+  if (!dbRef || !roomCode) return;
+
+  const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
   const payload = {
     msgId,
     sender: onlineSide,
     type: msg.type,
     move: msg.move || null,
-    turn,
+    turn: turn,
     ts: Date.now()
   };
-  
-  update(ref(database, `rooms/${roomCode}/${myKey}`), payload).catch(err => {
-    console.error('Send move error:', err);
-    setStatus('⚠️ Connection error. Retrying…');
-  });
+
+  update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
+    .catch(err => console.error('Send move failed:', err));
 }
 
 
@@ -1096,20 +1089,36 @@ function sendMove(moveData) {
     }
   }
 
-  function cancelOnline() {
-    SFX.click();
-    cleanupOnline();
-    onlineOverlay.classList.add('hidden');
-    if (gameMode === 'online') gameMode = 'ai';
+function cancelOnline() {
+  SFX.click();
+  cleanupListeners();
+
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
   }
 
-  function cleanupOnline() {
-    onlineReady = false;
-    lastSeenMsgId = null;
-    gunRoom = null;
-    onlineRoomCode = null;
-    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  document.getElementById('online-overlay').classList.add('hidden');
+  if (gameMode === 'online') gameMode = 'ai';
+}
+
+function cleanupListeners() {
+  if (statusListener) {
+    off(ref(database, `rooms/${roomCode}/status`));
+    statusListener = null;
   }
+  if (roomListener) {
+    off(dbRef);
+    roomListener = null;
+  }
+  if (moveListener) {
+    const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+    off(ref(database, `rooms/${roomCode}/${key}`));
+    moveListener = null;
+  }
+}}
 
   function setOnlineStatus(msg, type) {
     const waiting = document.getElementById('waiting-text');
@@ -1733,28 +1742,6 @@ function onlineJoin() {
   });
 }
 
-// =========== CANCEL ONLINE ===========
-function cancelOnline() {
-  SFX.click();
-  
-  if (moveListener) {
-    off(moveListener);
-    moveListener = null;
-  }
-  
-  if (dbRef && roomCode) {
-    set(ref(database, `rooms/${roomCode}`), null).catch(err => {
-      console.error('Error deleting room:', err);
-    });
-  }
-  
-  dbRef = null;
-  roomCode = null;
-  lastSeenMsgId = null;
-  document.getElementById('online-overlay').classList.add('hidden');
-  if (gameMode === 'online') gameMode = 'ai';
-}
-
 // =========== COPY ROOM CODE ===========
 function copyRoomCode() {
   if (roomCode) {
@@ -1808,7 +1795,7 @@ function setupCodeInputs() {
 }
 
 // =========== SET ONLINE STATUS ===========
-function setOnlineStatus(msg, type) {
+functionfunction setOnlineStatus(msg, type) {
   const waiting = document.getElementById('waiting-text');
   if (waiting) {
     waiting.textContent = msg;
