@@ -54,6 +54,14 @@ const HexAsteal = (function () {
   let onlineSide = PLAYER;
   let onlineRoomCode = null;
 
+  // =========== ONLINE RELAY (Gun.js + BroadcastChannel fallback) ===========
+  // Uses Gun.js decentralized real-time DB — no backend, works cross-device
+  let gun = null;
+  let gunRoom = null;
+  let pollInterval = null;
+  let lastSeenMsgId = null;
+  let onlineReady = false;
+
   // =========== SOUND ENGINE ===========
   const SFX = {
     ctx: null, on: true,
@@ -746,38 +754,40 @@ const HexAsteal = (function () {
     }
   }
 
-// ===== ONLINE (Firebase RTDB) =====
-
-function onlineCreate() {
+  function onlineCreate() {
   SFX.click();
   document.getElementById('online-create-join').classList.add('hidden');
   document.getElementById('online-waiting').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = 'none';
 
-  roomCode = String(Math.floor(1000 + Math.random() * 9000));
-  document.getElementById('room-code-big').textContent = roomCode;
-  document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  roomCode = code;
+  document.getElementById('room-code-big').textContent = code;
 
   onlineSide = PLAYER;
-  dbRef = ref(database, `rooms/${roomCode}`);
-
-  set(dbRef, { status: 'waiting', seed: 0, ts: Date.now() })
-    .catch(err => console.error('Create room error:', err));
-
-  const statusRef = ref(database, `rooms/${roomCode}/status`);
-  if (statusListener) off(statusRef);
-  statusListener = onValue(statusRef, (snap) => {
-    const status = snap.val();
-    if (status === 'joined') {
+  dbRef = ref(database, `rooms/${code}`);
+  
+  set(dbRef, {
+    status: 'waiting',
+    seed: 0,
+    p1: onlineSide,
+    ts: Date.now()
+  }).catch(err => console.error('Create room error:', err));
+  
+  // ✅ Store listener reference for cleanup
+  const statusRef = ref(database, `rooms/${code}/status`);
+  statusListener = onValue(statusRef, (snapshot) => {
+    const status = snapshot.val();
+    if (status === 'joined' && onlineSide === PLAYER) {
       const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
-      update(ref(database, `rooms/${roomCode}`), { status: 'started', seed });
-
+      update(ref(database, `rooms/${code}`), { status: 'started', seed });
+      
       document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
-
+      
       setTimeout(() => {
-        off(statusRef);
+        // ✅ Clean up this listener before starting
+        if (statusListener) off(statusRef);
         statusListener = null;
-
+        
         document.getElementById('online-overlay').classList.add('hidden');
         startOnlineGame(true, seed);
         startOnlineMoveListener();
@@ -789,39 +799,45 @@ function onlineCreate() {
 function onlineJoin() {
   SFX.click();
   const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
-  if (!/^\d{4}$/.test(code)) return setOnlineStatus('Enter all 4 digits.', 'error');
+  
+  if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+    setOnlineStatus('Enter all 4 digits.', 'error');
+    return;
+  }
 
   roomCode = code;
   onlineSide = PLAYER2;
-  dbRef = ref(database, `rooms/${roomCode}`);
-
-  document.getElementById('online-join-form').classList.add('hidden');
-  document.getElementById('online-connecting').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = 'none';
-
-  const roomRef = ref(database, `rooms/${roomCode}`);
+  dbRef = ref(database, `rooms/${code}`);
 
   let joinTimeout = setTimeout(() => {
     setOnlineStatus('Room not found. Check code.', 'error');
-    document.getElementById('online-back-btn').style.display = '';
   }, 10000);
 
-  if (roomListener) off(roomRef);
-  roomListener = onValue(roomRef, (snap) => {
-    const data = snap.val();
+  const roomRef = ref(database, `rooms/${code}`);
+  
+  // ✅ Store listener reference
+  roomListener = onValue(roomRef, (snapshot) => {
+    const data = snapshot.val();
+    
     if (!data) {
       clearTimeout(joinTimeout);
       setOnlineStatus('Room not found.', 'error');
-      off(roomRef); roomListener = null;
+      if (roomListener) off(roomRef);
+      roomListener = null;
       return;
     }
 
     clearTimeout(joinTimeout);
-    update(ref(database, `rooms/${roomCode}`), { status: 'joined' })
-      .catch(err => console.error('Join error:', err));
+    
+    update(ref(database, `rooms/${code}`), { status: 'joined' }).catch(err => 
+      console.error('Join error:', err)
+    );
 
     if (data.status === 'started') {
-      off(roomRef); roomListener = null;
+      // ✅ Clean up this listener before starting
+      if (roomListener) off(roomRef);
+      roomListener = null;
+      
       document.getElementById('online-overlay').classList.add('hidden');
       startOnlineGame(false, data.seed);
       startOnlineMoveListener();
@@ -830,83 +846,275 @@ function onlineJoin() {
 }
 
 function startOnlineMoveListener() {
-  if (!roomCode) return;
-
-  const listenKey = (onlineSide === PLAYER) ? 'p2_move' : 'p1_move';
-  const moveRef = ref(database, `rooms/${roomCode}/${listenKey}`);
-
-  if (moveListener) off(moveRef);
-  moveListener = onValue(moveRef, (snap) => {
-    const data = snap.val();
-    if (!data?.msgId) return;
+  if (!dbRef || !roomCode) return;
+  
+  const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+  const moveRef = ref(database, `rooms/${roomCode}/${myKey}`);
+  
+  // ✅ Store listener reference for cleanup
+  moveListener = onValue(moveRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data || !data.msgId) return;
     if (data.msgId === lastSeenMsgId) return;
-    if (data.sender === onlineSide) return;
 
-    // optional strictness:
-    if (typeof data.turn === 'number' && data.turn !== turn) return;
+    const isOpponent = data.sender && data.sender !== onlineSide;
+    if (!isOpponent) return;
+
+    // ✅ NEW: Validate turn number
+    if (data.turn !== turn) {
+      console.warn('Turn mismatch:', data.turn, 'vs', turn);
+      return;
+    }
 
     lastSeenMsgId = data.msgId;
     handleOnlineMessage(data);
   });
 }
 
-function sendOnline(msg) {
-  if (!roomCode) return;
-
-  const writeKey = (onlineSide === PLAYER) ? 'p1_move' : 'p2_move';
-  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-
-  update(ref(database, `rooms/${roomCode}/${writeKey}`), {
-    msgId,
-    sender: onlineSide,
-    type: msg.type,
-    move: msg.move ?? null,
-    turn,
-    ts: Date.now()
-  }).catch(err => console.error('Send error:', err));
-}
-
+// =========== FIX: CANCEL ONLINE ===========
 function cancelOnline() {
   SFX.click();
-
-  if (roomCode) {
-    try { off(ref(database, `rooms/${roomCode}/status`)); } catch {}
-    try { off(ref(database, `rooms/${roomCode}`)); } catch {}
+  
+  // ✅ Clean up all listeners properly
+  if (statusListener && roomCode) {
     try {
-      const listenKey = (onlineSide === PLAYER) ? 'p2_move' : 'p1_move';
-      off(ref(database, `rooms/${roomCode}/${listenKey}`));
-    } catch {}
+      off(ref(database, `rooms/${roomCode}/status`));
+    } catch (e) {}
+    statusListener = null;
   }
-
-  statusListener = null;
-  roomListener = null;
-  moveListener = null;
-  lastSeenMsgId = null;
-
-  // delete room only if host
-  if (roomCode && onlineSide === PLAYER) {
-    set(ref(database, `rooms/${roomCode}`), null).catch(console.error);
+  
+  if (roomListener && roomCode) {
+    try {
+      off(ref(database, `rooms/${roomCode}`));
+    } catch (e) {}
+    roomListener = null;
   }
-
+  
+  if (moveListener && roomCode) {
+    try {
+      const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+      off(ref(database, `rooms/${roomCode}/${myKey}`));
+    } catch (e) {}
+    moveListener = null;
+  }
+  
+  // ✅ Delete room if we're the creator
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(err => 
+      console.error('Delete error:', err)
+    );
+  }
+  
   dbRef = null;
   roomCode = null;
-
+  lastSeenMsgId = null;
+  
   document.getElementById('online-overlay').classList.add('hidden');
   if (gameMode === 'online') gameMode = 'ai';
 }
-
-function copyRoomCode() {
-  if (!roomCode) return;
-  navigator.clipboard.writeText(roomCode).catch(() => {});
-  SFX.click();
+function sendOnline(msg) {
+  if (!dbRef || !roomCode) {
+    console.error('No active room');
+    return;
+  }
+  
+  const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  
+  const payload = {
+    msgId,
+    sender: onlineSide,
+    type: msg.type,
+    move: msg.move || null,
+    turn,
+    ts: Date.now()
+  };
+  
+  update(ref(database, `rooms/${roomCode}/${myKey}`), payload).catch(err => {
+    console.error('Send move error:', err);
+    setStatus('⚠️ Connection error. Retrying…');
+  });
 }
 
-function setOnlineStatus(msg, type) {
-  const el = document.getElementById('waiting-text');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = type === 'error' ? '#f87171' : '';
+
+function handleOnlineMessage(data) {
+  if (!data || !data.type) return;
+  if (data.sender === onlineSide) return;
+
+  if (data.type === 'move') {
+    if (phase !== 'wait-online') {
+      console.warn('Wrong phase for move:', phase);
+      return;
+    }
+    applyRemoteMove(data.move);
+  }
+  else if (data.type === 'skip') {
+    if (phase !== 'wait-online') {
+      console.warn('Wrong phase for skip:', phase);
+      return;
+    }
+    applyRemoteSkip();
+  }
 }
+
+  // seeded random for sync
+  let _rngSeed = 0;
+  function seededRand(n) {
+    _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
+    return Math.abs(_rngSeed) % n;
+  }
+
+function startOnlineGame(isHost, seed) {
+  gameMode = 'online';
+  cfg = mpConfig();
+  hideAllOverlays();
+  turn = 1; 
+  phase = 'select';
+  selectedHex = null; 
+  validTargets = []; 
+  transferTargets = []; 
+  animating = false;
+
+  const useSeed = seed || (Date.now() & 0xffff);
+  generateMapSeeded(useSeed);
+  createBoard();
+
+  SFX.stageStart();
+  render();
+
+  if (onlineSide === PLAYER) {
+    setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
+  } else {
+    phase = 'wait-online';
+    setStatus('🌐 Waiting for P1 to move…');
+  }
+  render();
+}
+
+  // Map generation using seeded random
+  function generateMapSeeded(seed) {
+    _rngSeed = seed;
+    grid = [];
+    for (let r = 0; r < ROWS; r++) {
+      grid[r] = [];
+      for (let c = 0; c < COLS; c++) grid[r][c] = makeCell(NEUTRAL, 1 + seededRand(4));
+    }
+    const pStarts = [[5,0],[5,1],[6,0],[6,1]];
+    pStarts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER, cfg.pPow + seededRand(2)); });
+    const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
+    p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + seededRand(2)); });
+
+    let placed = 0, att = 0;
+    while (placed < cfg.blocked && att < 300) {
+      att++;
+      const r = seededRand(ROWS), c = seededRand(COLS);
+      if (grid[r][c].owner !== NEUTRAL) continue;
+      const nearP = pStarts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      const nearP2 = p2Starts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      if (nearP || nearP2) continue;
+      grid[r][c] = makeCell(BLOCKED, 0);
+      placed++;
+    }
+
+    const neutrals = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (grid[r][c].owner === NEUTRAL) neutrals.push([r, c]);
+    for (let i = neutrals.length - 1; i > 0; i--) {
+      const j = seededRand(i + 1);
+      [neutrals[i], neutrals[j]] = [neutrals[j], neutrals[i]];
+    }
+    const numPU = Math.min(cfg.pups, neutrals.length);
+    for (let i = 0; i < numPU; i++) {
+      const [r, c] = neutrals[i];
+      grid[r][c].powerup = PU_KEYS[i % PU_KEYS.length];
+    }
+  }
+
+  function applyRemoteMove(move) {
+    if (!move) return;
+    animating = true;
+    if (move.type === 'transfer') {
+      const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
+      if (!src || !dst) { animating = false; return; }
+      const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
+      if (actual > 0) { src.power -= actual; dst.power += actual; }
+      flashHex(move.sr, move.sc, 'flash-transfer-out', 400);
+      flashHex(move.dr, move.dc, 'flash-transfer-in', 400);
+      render();
+      setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 500);
+    } else if (move.type === 'attack') {
+      const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
+      if (!src || !dst) { animating = false; return; }
+      let aPow = src.power;
+      if (src.blazeBuffed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
+      let dPow = dst.power;
+      if (dst.shielded) dPow += 3;
+      const capPU = dst.powerup;
+      if (aPow > dPow) {
+        dst.owner = src.owner; dst.power = Math.min(aPow-dPow, MAX_POWER);
+        src.power = 1; dst.powerup = null; dst.shielded = false;
+        dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
+        flashHex(move.dr, move.dc, onlineSide === PLAYER ? 'flash-ai-capture' : 'flash-capture', 550);
+        SFX.attack();
+        if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
+        setStatus(`⚔️ Opponent captured! (${aPow} vs ${dPow})`);
+      } else if (aPow === dPow) {
+        src.power = Math.max(1, src.power-1);
+        setStatus('⚔️ Opponent tied!');
+      } else {
+        src.power = 1; if (dst.power > 1) dst.power -= 1;
+        setStatus('⚔️ Opponent attack failed!');
+      }
+      render();
+      setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 700);
+    }
+  }
+
+  function applyRemoteSkip() {
+    setStatus('⚔️ Opponent skipped.');
+    afterOpponentTurn();
+  }
+
+function afterOpponentTurn() {
+  turn++;
+  growPhaseOwner(onlineSide);
+  phase = 'select';
+  const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
+  setStatus(`🌐 Your turn (${label}) — select a hex`);
+  render();
+}
+
+function sendMove(moveData) {
+  sendOnline({ type: 'move', move: moveData });
+}
+
+  function copyRoomCode() {
+    if (onlineRoomCode) {
+      navigator.clipboard.writeText(onlineRoomCode).catch(() => {});
+      SFX.click();
+    }
+  }
+
+  function cancelOnline() {
+    SFX.click();
+    cleanupOnline();
+    onlineOverlay.classList.add('hidden');
+    if (gameMode === 'online') gameMode = 'ai';
+  }
+
+  function cleanupOnline() {
+    onlineReady = false;
+    lastSeenMsgId = null;
+    gunRoom = null;
+    onlineRoomCode = null;
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  }
+
+  function setOnlineStatus(msg, type) {
+    const waiting = document.getElementById('waiting-text');
+    if (waiting) { waiting.textContent = msg; waiting.style.color = type === 'error' ? '#f87171' : ''; }
+  }
 
   // =========== STAGE MANAGEMENT ===========
   function startStage(s) {
@@ -1411,7 +1619,7 @@ function afterPlayerTurn() {
         showLocalTurnBanner();
       } else if (gameMode === 'online') {
         phase = 'wait-online';
-        growPhaseOwner(onlineSide); turn++;
+        growPhaseOwner(opponentOwner()); turn++;
         setStatus('🌐 Waiting for opponent…'); render();
       }
     }, 300);
@@ -1689,3 +1897,4 @@ function selectMode(mode) {
     dismissLocalBanner
   };
 })();
+window.HexAsteal = HexAsteal;
