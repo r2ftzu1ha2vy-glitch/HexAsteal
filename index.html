@@ -202,6 +202,43 @@
     </div>
   </div>
 
+<!-- Online Mode Overlay -->
+<div id="online-overlay" class="overlay hidden">
+  <div class="modal">
+    <div id="online-create-join">
+      <h2>🌐 Multiplayer</h2>
+      <button onclick="onlineCreate()">➕ Create Room</button>
+      <button onclick="showJoinRoom()">🔗 Join Room</button>
+      <button id="online-back-btn" onclick="cancelOnline()">← Back</button>
+    </div>
+
+    <div id="online-waiting" class="hidden">
+      <h3>Room Code</h3>
+      <p id="room-code-big" style="font-size:48px;font-weight:bold;letter-spacing:8px;"></p>
+      <button onclick="copyRoomCode()">📋 Copy Code</button>
+      <p id="waiting-text">Waiting for opponent…</p>
+      <button id="online-back-btn" onclick="cancelOnline()">← Cancel</button>
+    </div>
+
+    <div id="online-join-form" class="hidden">
+      <h3>Enter Room Code</h3>
+      <div style="display:flex;gap:8px;margin:16px 0;">
+        <input id="cd0" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
+        <input id="cd1" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
+        <input id="cd2" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
+        <input id="cd3" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
+      </div>
+      <button onclick="onlineJoin()">🔗 Join</button>
+      <button id="online-back-btn" onclick="showCreateJoin()">← Back</button>
+    </div>
+
+    <div id="online-connecting" class="hidden">
+      <p id="online-connecting-text">Connecting…</p>
+      <button id="online-back-btn" onclick="cancelOnline()">← Cancel</button>
+    </div>
+  </div>
+</div>
+  
   <!-- Local 2P turn banner -->
   <div id="local-turn-banner" class="overlay-screen hidden">
     <div class="overlay-card local-banner-card">
