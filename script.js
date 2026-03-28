@@ -19,10 +19,11 @@ const database = getDatabase(app);
 // =========== GLOBAL FIREBASE VARIABLES ===========
 let dbRef = null;
 let roomCode = null;
-let lastSeenMsgId = null;
+let onlineSide = PLAYER;        // PLAYER (host) or PLAYER2 (guest)
 let moveListener = null;
 let statusListener = null;
 let roomListener = null;
+let lastSeenMsgId = null;
 const HexAsteal = (function () {
   'use strict';
 
@@ -718,80 +719,83 @@ const HexAsteal = (function () {
     });
   }
 
-  function showOnlineLobby() {
-    onlineOverlay.classList.remove('hidden');
-    showCreateJoin();
-  }
+function showOnlineLobby() {
+  onlineOverlay.classList.remove('hidden');
+  showCreateJoin();
+}
 
-  function showCreateJoin() {
-    document.getElementById('online-create-join').classList.remove('hidden');
-    document.getElementById('online-join-form').classList.add('hidden');
-    document.getElementById('online-waiting').classList.add('hidden');
-    document.getElementById('online-connecting').classList.add('hidden');
-    document.getElementById('online-back-btn').style.display = '';
-  }
+function showCreateJoin() {
+  document.getElementById('online-create-join').classList.remove('hidden');
+  document.getElementById('online-join-form').classList.add('hidden');
+  document.getElementById('online-waiting').classList.add('hidden');
+  document.getElementById('online-connecting').classList.add('hidden');
+  document.getElementById('online-back-btn').style.display = '';
+}
 
-  function showJoinRoom() {
-    SFX.click();
-    document.getElementById('online-create-join').classList.add('hidden');
-    document.getElementById('online-join-form').classList.remove('hidden');
-    document.getElementById('online-back-btn').style.display = '';
-    setTimeout(() => document.getElementById('cd0').focus(), 100);
-    setupCodeInputs();
-  }
+function showJoinRoom() {
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-join-form').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = '';
+  setupCodeInputs();
+  setTimeout(() => document.getElementById('cd0').focus(), 50);
+}
 
-  function setupCodeInputs() {
-    for (let i = 0; i < 4; i++) {
-      const el = document.getElementById(`cd${i}`);
-      el.value = '';
-      el.oninput = () => {
-        el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
-        if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
-      };
-      el.onkeydown = (e) => {
-        if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
-      };
-    }
+function setupCodeInputs() {
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById(`cd${i}`);
+    el.value = '';
+    el.oninput = () => {
+      el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
+      if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
+    };
+    el.onkeydown = (e) => {
+      if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
+    };
   }
+}
 
-  function onlineCreate() {
+function onlineCreate() {
   SFX.click();
   document.getElementById('online-create-join').classList.add('hidden');
   document.getElementById('online-waiting').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = 'none';
 
   const code = String(Math.floor(1000 + Math.random() * 9000));
   roomCode = code;
-  document.getElementById('room-code-big').textContent = code;
-
   onlineSide = PLAYER;
+
+  document.getElementById('room-code-big').textContent = code;
+  document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+
+  // === FIXED: Generate seed IMMEDIATELY so both players get the exact same map ===
+  const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+
   dbRef = ref(database, `rooms/${code}`);
-  
+
   set(dbRef, {
     status: 'waiting',
-    seed: 0,
-    p1: onlineSide,
-    ts: Date.now()
-  }).catch(err => console.error('Create room error:', err));
-  
-  // ✅ Store listener reference for cleanup
+    seed: seed,           // ← seed is set at creation
+    createdAt: Date.now()
+  }).catch(err => {
+    console.error('Create room error:', err);
+    setOnlineStatus('Failed to create room.', 'error');
+  });
+
+  // Listen for opponent joining
   const statusRef = ref(database, `rooms/${code}/status`);
   statusListener = onValue(statusRef, (snapshot) => {
-    const status = snapshot.val();
-    if (status === 'joined' && onlineSide === PLAYER) {
-      const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
-      update(ref(database, `rooms/${code}`), { status: 'started', seed });
-      
-      document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
-      
+    if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
+      update(dbRef, { status: 'started' }).catch(console.error);
+
+      document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+
       setTimeout(() => {
-        // ✅ Clean up this listener before starting
-        if (statusListener) off(statusRef);
-        statusListener = null;
-        
+        cleanupListeners();
         document.getElementById('online-overlay').classList.add('hidden');
         startOnlineGame(true, seed);
         startOnlineMoveListener();
-      }, 600);
+      }, 700);
     }
   });
 }
@@ -799,47 +803,44 @@ const HexAsteal = (function () {
 function onlineJoin() {
   SFX.click();
   const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
-  
+
   if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-    setOnlineStatus('Enter all 4 digits.', 'error');
+    setOnlineStatus('Enter a valid 4-digit code.', 'error');
     return;
   }
+
+  document.getElementById('online-join-form').classList.add('hidden');
+  const connectingEl = document.getElementById('online-connecting');
+  connectingEl.classList.remove('hidden');
+  connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
 
   roomCode = code;
   onlineSide = PLAYER2;
   dbRef = ref(database, `rooms/${code}`);
 
   let joinTimeout = setTimeout(() => {
-    setOnlineStatus('Room not found. Check code.', 'error');
-  }, 10000);
+    connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found or expired.</p>`;
+    document.getElementById('online-back-btn').style.display = '';
+  }, 12000);
 
-  const roomRef = ref(database, `rooms/${code}`);
-  
-  // ✅ Store listener reference
-  roomListener = onValue(roomRef, (snapshot) => {
+  roomListener = onValue(dbRef, (snapshot) => {
     const data = snapshot.val();
-    
     if (!data) {
       clearTimeout(joinTimeout);
-      setOnlineStatus('Room not found.', 'error');
-      if (roomListener) off(roomRef);
-      roomListener = null;
+      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found.</p>`;
       return;
     }
-
     clearTimeout(joinTimeout);
-    
-    update(ref(database, `rooms/${code}`), { status: 'joined' }).catch(err => 
-      console.error('Join error:', err)
-    );
+
+    if (data.status === 'waiting') {
+      update(dbRef, { status: 'joined' }).catch(console.error);
+      connectingEl.innerHTML = `<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+    }
 
     if (data.status === 'started') {
-      // ✅ Clean up this listener before starting
-      if (roomListener) off(roomRef);
-      roomListener = null;
-      
+      cleanupListeners();
       document.getElementById('online-overlay').classList.add('hidden');
-      startOnlineGame(false, data.seed);
+      startOnlineGame(false, data.seed);     // ← now guaranteed same seed
       startOnlineMoveListener();
     }
   });
@@ -847,280 +848,106 @@ function onlineJoin() {
 
 function startOnlineMoveListener() {
   if (!dbRef || !roomCode) return;
-  
-  const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-  const moveRef = ref(database, `rooms/${roomCode}/${myKey}`);
-  
-  // ✅ Store listener reference for cleanup
+
+  const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+  const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
+
   moveListener = onValue(moveRef, (snapshot) => {
     const data = snapshot.val();
-    if (!data || !data.msgId) return;
-    if (data.msgId === lastSeenMsgId) return;
-
-    const isOpponent = data.sender && data.sender !== onlineSide;
-    if (!isOpponent) return;
-
-    if (data.turn !== turn) {
-  console.warn('Turn mismatch - ignoring message');
-  return;
-}
-if (phase !== 'wait-online') {
-  console.warn('Wrong phase for opponent move');
-  return;
-}
+    if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
+    if (data.sender === onlineSide) return;
 
     lastSeenMsgId = data.msgId;
+
+    if (data.turn !== turn) {
+      console.warn('Turn mismatch:', data.turn, 'vs', turn);
+      return;
+    }
+
     handleOnlineMessage(data);
   });
 }
 
-// =========== FIX: CANCEL ONLINE ===========
-function cancelOnline() {
-  SFX.click();
-  
-  // ✅ Clean up all listeners properly
-  if (statusListener && roomCode) {
-    try {
-      off(ref(database, `rooms/${roomCode}/status`));
-    } catch (e) {}
-    statusListener = null;
-  }
-  
-  if (roomListener && roomCode) {
-    try {
-      off(ref(database, `rooms/${roomCode}`));
-    } catch (e) {}
-    roomListener = null;
-  }
-  
-  if (moveListener && roomCode) {
-    try {
-      const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-      off(ref(database, `rooms/${roomCode}/${myKey}`));
-    } catch (e) {}
-    moveListener = null;
-  }
-  
-  // ✅ Delete room if we're the creator
-  if (dbRef && roomCode && onlineSide === PLAYER) {
-    set(ref(database, `rooms/${roomCode}`), null).catch(err => 
-      console.error('Delete error:', err)
-    );
-  }
-  
-  dbRef = null;
-  roomCode = null;
-  lastSeenMsgId = null;
-  
-  document.getElementById('online-overlay').classList.add('hidden');
-  if (gameMode === 'online') gameMode = 'ai';
-}
 function sendOnline(msg) {
-  if (!dbRef || !roomCode) {
-    console.error('No active room');
-    return;
-  }
-  
-  const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
-  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  
+  if (!dbRef || !roomCode) return;
+
+  const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
   const payload = {
     msgId,
     sender: onlineSide,
     type: msg.type,
     move: msg.move || null,
-    turn,
+    turn: turn,
     ts: Date.now()
   };
-  
-  update(ref(database, `rooms/${roomCode}/${myKey}`), payload).catch(err => {
-    console.error('Send move error:', err);
-    setStatus('⚠️ Connection error. Retrying…');
-  });
+
+  update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
+    .catch(err => console.error('Send failed:', err));
 }
 
-
-function handleOnlineMessage(data) {
-  if (!data || !data.type) return;
-  if (data.sender === onlineSide) return;
-
-  if (data.type === 'move') {
-    if (phase !== 'wait-online') {
-      console.warn('Wrong phase for move:', phase);
-      return;
-    }
-    applyRemoteMove(data.move);
-  }
-  else if (data.type === 'skip') {
-    if (phase !== 'wait-online') {
-      console.warn('Wrong phase for skip:', phase);
-      return;
-    }
-    applyRemoteSkip();
-  }
-}
-
-  // seeded random for sync
-  let _rngSeed = 0;
-  function seededRand(n) {
-    _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
-    return Math.abs(_rngSeed) % n;
-  }
-
-function startOnlineGame(isHost, seed) {
-  gameMode = 'online';
-  cfg = mpConfig();
-  hideAllOverlays();
-  turn = 1; 
-  phase = 'select';
-  selectedHex = null; 
-  validTargets = []; 
-  transferTargets = []; 
-  animating = false;
-
-  const useSeed = seed || (Date.now() & 0xffff);
-  generateMapSeeded(useSeed);
-  createBoard();
-
-  SFX.stageStart();
-  render();
-
-  if (onlineSide === PLAYER) {
-    setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
-  } else {
+// FIXED: Growth now happens at the correct time on both clients
+function afterPlayerTurn() {
+  if (gameMode === 'ai') {
+    beginAITurn();
+  } else if (gameMode === 'local') {
+    localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
+    growPhaseOwner(localTurn);
+    turn++;
+    phase = 'select';
+    render();
+    showLocalTurnBanner();
+  } else if (gameMode === 'online') {
     phase = 'wait-online';
-    setStatus('🌐 Waiting for P1 to move…');
+    // Do NOT grow here — the opponent will grow their side when they receive our move
+    turn++;
+    setStatus('🌐 Waiting for opponent…');
+    render();
   }
-  render();
 }
-
-  // Map generation using seeded random
-  function generateMapSeeded(seed) {
-    _rngSeed = seed;
-    grid = [];
-    for (let r = 0; r < ROWS; r++) {
-      grid[r] = [];
-      for (let c = 0; c < COLS; c++) grid[r][c] = makeCell(NEUTRAL, 1 + seededRand(4));
-    }
-    const pStarts = [[5,0],[5,1],[6,0],[6,1]];
-    pStarts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER, cfg.pPow + seededRand(2)); });
-    const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
-    p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + seededRand(2)); });
-
-    let placed = 0, att = 0;
-    while (placed < cfg.blocked && att < 300) {
-      att++;
-      const r = seededRand(ROWS), c = seededRand(COLS);
-      if (grid[r][c].owner !== NEUTRAL) continue;
-      const nearP = pStarts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
-      const nearP2 = p2Starts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
-      if (nearP || nearP2) continue;
-      grid[r][c] = makeCell(BLOCKED, 0);
-      placed++;
-    }
-
-    const neutrals = [];
-    for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++)
-        if (grid[r][c].owner === NEUTRAL) neutrals.push([r, c]);
-    for (let i = neutrals.length - 1; i > 0; i--) {
-      const j = seededRand(i + 1);
-      [neutrals[i], neutrals[j]] = [neutrals[j], neutrals[i]];
-    }
-    const numPU = Math.min(cfg.pups, neutrals.length);
-    for (let i = 0; i < numPU; i++) {
-      const [r, c] = neutrals[i];
-      grid[r][c].powerup = PU_KEYS[i % PU_KEYS.length];
-    }
-  }
-
-  function applyRemoteMove(move) {
-    if (!move) return;
-    animating = true;
-    if (move.type === 'transfer') {
-      const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
-      if (!src || !dst) { animating = false; return; }
-      const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
-      if (actual > 0) { src.power -= actual; dst.power += actual; }
-      flashHex(move.sr, move.sc, 'flash-transfer-out', 400);
-      flashHex(move.dr, move.dc, 'flash-transfer-in', 400);
-      render();
-      setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 500);
-    } else if (move.type === 'attack') {
-      const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
-      if (!src || !dst) { animating = false; return; }
-      let aPow = src.power;
-      if (src.blazeBuffed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
-      let dPow = dst.power;
-      if (dst.shielded) dPow += 3;
-      const capPU = dst.powerup;
-      if (aPow > dPow) {
-        dst.owner = src.owner; dst.power = Math.min(aPow-dPow, MAX_POWER);
-        src.power = 1; dst.powerup = null;
-dst.shielded = false;
-dst.blazeBuffed = false;
-dst.frozen = false;
-dst.boss = false;
-        flashHex(move.dr, move.dc, onlineSide === PLAYER ? 'flash-ai-capture' : 'flash-capture', 550);
-        SFX.attack();
-        if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
-        setStatus(`⚔️ Opponent captured! (${aPow} vs ${dPow})`);
-      } else if (aPow === dPow) {
-        src.power = Math.max(1, src.power-1);
-        setStatus('⚔️ Opponent tied!');
-      } else {
-        src.power = 1; if (dst.power > 1) dst.power -= 1;
-        setStatus('⚔️ Opponent attack failed!');
-      }
-      render();
-      setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 700);
-    }
-  }
-
-  function applyRemoteSkip() {
-    setStatus('⚔️ Opponent skipped.');
-    afterOpponentTurn();
-  }
 
 function afterOpponentTurn() {
   turn++;
-  growPhaseOwner(onlineSide);
+  growPhaseOwner(onlineSide);   // ← Now it's MY turn → grow MY side (fixed)
   phase = 'select';
   const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
   setStatus(`🌐 Your turn (${label}) — select a hex`);
   render();
 }
 
-function sendMove(moveData) {
-  sendOnline({ type: 'move', move: moveData });
+function cleanupListeners() {
+  if (statusListener) { off(ref(database, `rooms/${roomCode}/status`)); statusListener = null; }
+  if (roomListener) { off(dbRef); roomListener = null; }
+  if (moveListener) {
+    const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+    off(ref(database, `rooms/${roomCode}/${key}`));
+    moveListener = null;
+  }
 }
 
-  function copyRoomCode() {
-    if (onlineRoomCode) {
-      navigator.clipboard.writeText(onlineRoomCode).catch(() => {});
-      SFX.click();
-    }
+function cancelOnline() {
+  SFX.click();
+  cleanupListeners();
+
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
   }
 
-  function cancelOnline() {
-    SFX.click();
-    cleanupOnline();
-    onlineOverlay.classList.add('hidden');
-    if (gameMode === 'online') gameMode = 'ai';
-  }
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  document.getElementById('online-overlay').classList.add('hidden');
+  if (gameMode === 'online') gameMode = 'ai';
+}
 
-  function cleanupOnline() {
-    onlineReady = false;
-    lastSeenMsgId = null;
-    gunRoom = null;
-    onlineRoomCode = null;
-    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+function setOnlineStatus(msg, type) {
+  const waiting = document.getElementById('waiting-text');
+  if (waiting) {
+    waiting.textContent = msg;
+    waiting.style.color = type === 'error' ? '#f87171' : '';
   }
-
-  function setOnlineStatus(msg, type) {
-    const waiting = document.getElementById('waiting-text');
-    if (waiting) { waiting.textContent = msg; waiting.style.color = type === 'error' ? '#f87171' : ''; }
-  }
+}
 
   // =========== STAGE MANAGEMENT ===========
   function startStage(s) {
