@@ -852,9 +852,14 @@ const HexAsteal = (function () {
   }
 
 function startOnlineMoveListener() {
-  if (!gunRoom) return;
+  if (!dbRef) return;
+  
   const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-  gunRoom.get(myKey).on((data) => {
+  const moveRef = ref(database, `rooms/${roomCode}/${myKey}`);
+  
+  moveListener = onValue(moveRef, (snapshot) => {
+    const data = snapshot.val();
+    
     if (!data || !data.msgId) return;
     if (data.msgId === lastSeenMsgId) return;
 
@@ -867,16 +872,23 @@ function startOnlineMoveListener() {
 }
 
 function sendOnline(msg) {
-  if (!gunRoom) return;
+  if (!dbRef) return;
+  
   const myKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
   const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  const payload = Object.assign({}, msg, {
+  
+  const payload = {
     msgId,
     sender: onlineSide,
+    type: msg.type,
+    move: msg.move || null,
     turn,
     ts: Date.now()
+  };
+  
+  update(ref(database, `rooms/${roomCode}/${myKey}`), payload).catch(err => {
+    console.error('Firebase send error:', err);
   });
-  gunRoom.get(myKey).put(payload);
 }
 
 function handleOnlineMessage(data) {
@@ -1021,9 +1033,9 @@ function afterOpponentTurn() {
   render();
 }
 
-  function sendMove(moveData) {
-    sendOnline({ type: 'move', move: moveData });
-  }
+function sendMove(moveData) {
+  sendOnline({ type: 'move', move: moveData });
+}
 
   function copyRoomCode() {
     if (onlineRoomCode) {
@@ -1269,7 +1281,6 @@ function afterPlayerTurn() {
     render();
   }
 }
-
   // =========== POWER-UP EFFECTS ===========
   function applyPowerup(type, r, c, owner) {
     const cell = grid[r][c];
@@ -1568,6 +1579,210 @@ function afterPlayerTurn() {
     if (SFX.on) SFX.click();
   }
 
+// =========== CREATE ROOM - FIREBASE ===========
+function onlineCreate() {
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-waiting').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = 'none';
+
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  roomCode = code;
+  document.getElementById('room-code-big').textContent = code;
+  document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+
+  onlineSide = PLAYER;
+  dbRef = ref(database, `rooms/${code}`);
+  
+  const roomData = {
+    status: 'waiting',
+    seed: 0,
+    p1: onlineSide,
+    ts: Date.now()
+  };
+  
+  set(dbRef, roomData).catch(err => {
+    console.error('Firebase room creation error:', err);
+    setOnlineStatus('Connection failed. Check your internet.', 'error');
+  });
+  
+  const statusRef = ref(database, `rooms/${code}/status`);
+  onValue(statusRef, (snapshot) => {
+    const status = snapshot.val();
+    if (status === 'joined' && onlineSide === PLAYER) {
+      const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+      update(ref(database, `rooms/${code}`), { 
+        status: 'started', 
+        seed 
+      });
+      document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
+      setTimeout(() => {
+        document.getElementById('online-overlay').classList.add('hidden');
+        startOnlineGame(true, seed);
+        startOnlineMoveListener();
+      }, 600);
+    }
+  });
+}
+
+// =========== JOIN ROOM - FIREBASE ===========
+function onlineJoin() {
+  SFX.click();
+  const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
+  
+  if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+    setOnlineStatus('Enter all 4 digits.', 'error');
+    return;
+  }
+
+  document.getElementById('online-join-form').classList.add('hidden');
+  document.getElementById('online-connecting').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = 'none';
+  document.getElementById('online-connecting').innerHTML =
+    '<p class="mode-sub">Connecting to room ' + code + '…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
+
+  roomCode = code;
+  onlineSide = PLAYER2;
+  dbRef = ref(database, `rooms/${code}`);
+
+  let joinTimeout = setTimeout(() => {
+    document.getElementById('online-connecting').innerHTML =
+      '<p class="mode-sub" style="color:#f87171">Room not found. Check the code.</p>';
+    document.getElementById('online-back-btn').style.display = '';
+  }, 10000);
+
+  const roomRef = ref(database, `rooms/${code}`);
+  onValue(roomRef, (snapshot) => {
+    const data = snapshot.val();
+    
+    if (!data) {
+      clearTimeout(joinTimeout);
+      document.getElementById('online-connecting').innerHTML =
+        '<p class="mode-sub" style="color:#f87171">Room not found.</p>';
+      document.getElementById('online-back-btn').style.display = '';
+      return;
+    }
+
+    clearTimeout(joinTimeout);
+    
+    update(ref(database, `rooms/${code}`), { status: 'joined' }).catch(err => {
+      console.error('Error joining room:', err);
+    });
+    
+    document.getElementById('online-connecting').innerHTML =
+      '<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
+
+    if (data.status === 'started') {
+      off(roomRef);
+      document.getElementById('online-overlay').classList.add('hidden');
+      startOnlineGame(false, data.seed);
+      startOnlineMoveListener();
+    }
+  });
+}
+
+// =========== CANCEL ONLINE ===========
+function cancelOnline() {
+  SFX.click();
+  
+  if (moveListener) {
+    off(moveListener);
+    moveListener = null;
+  }
+  
+  if (dbRef && roomCode) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(err => {
+      console.error('Error deleting room:', err);
+    });
+  }
+  
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  document.getElementById('online-overlay').classList.add('hidden');
+  if (gameMode === 'online') gameMode = 'ai';
+}
+
+// =========== COPY ROOM CODE ===========
+function copyRoomCode() {
+  if (roomCode) {
+    navigator.clipboard.writeText(roomCode).then(() => {
+      SFX.click();
+      alert('Room code copied: ' + roomCode);
+    }).catch(() => {
+      alert('Room code: ' + roomCode);
+    });
+  }
+}
+
+// =========== SHOW ONLINE LOBBY ===========
+function showOnlineLobby() {
+  document.getElementById('online-overlay').classList.remove('hidden');
+  showCreateJoin();
+}
+
+// =========== SHOW CREATE/JOIN ===========
+function showCreateJoin() {
+  document.getElementById('online-create-join').classList.remove('hidden');
+  document.getElementById('online-join-form').classList.add('hidden');
+  document.getElementById('online-waiting').classList.add('hidden');
+  document.getElementById('online-connecting').classList.add('hidden');
+  document.getElementById('online-back-btn').style.display = '';
+}
+
+// =========== SHOW JOIN FORM ===========
+function showJoinRoom() {
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-join-form').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = '';
+  setTimeout(() => document.getElementById('cd0').focus(), 100);
+  setupCodeInputs();
+}
+
+// =========== SETUP CODE INPUTS ===========
+function setupCodeInputs() {
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById(`cd${i}`);
+    el.value = '';
+    el.oninput = () => {
+      el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
+      if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
+    };
+    el.onkeydown = (e) => {
+      if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
+    };
+  }
+}
+
+// =========== SET ONLINE STATUS ===========
+function setOnlineStatus(msg, type) {
+  const waiting = document.getElementById('waiting-text');
+  if (waiting) {
+    waiting.textContent = msg;
+    waiting.style.color = type === 'error' ? '#f87171' : '';
+  }
+}
+
+// =========== SELECT MODE ===========
+function selectMode(mode) {
+  SFX.click();
+  document.getElementById('mode-overlay').classList.add('hidden');
+  
+  if (mode === gameMode) return;
+
+  gameMode = mode;
+  if (mode === 'ai') {
+    cancelOnline();
+    startStage(progress.stage);
+  } else if (mode === 'local') {
+    cancelOnline();
+    startLocalGame();
+  } else if (mode === 'online') {
+    showOnlineLobby();
+  }
+}
+  
   // =========== INIT ===========
   function init() {
     svgEl       = document.getElementById('grid');
