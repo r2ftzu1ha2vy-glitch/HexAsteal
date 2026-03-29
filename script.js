@@ -1642,19 +1642,21 @@ function doOnlineRematch(seed) {
         flashHex(r, c, 'flash-freeze flash-powerup', 600);
         return `❄ Froze ${froze}`;
       }
-      case 'spread':
-  const neutralNeigh = getNeighbors(r, c).filter(([nr,nc]) => grid[nr][nc].owner === NEUTRAL);
-  if (neutralNeigh.length === 0) return '🌀 Spread! (no neutral)';
-  const pickIndex = gameMode === 'online' ? seededRand(neutralNeigh.length) : randInt(neutralNeigh.length);
-  const [nr, nc] = neutralNeigh[pickIndex];
-  const sPU = grid[nr][nc].powerup;
-  grid[nr][nc] = makeCell(owner, Math.max(1, Math.floor(cell.power / 2)));
-  grid[nr][nc].powerup = sPU;  // ← ADD THIS LINE to preserve powerup
-  flashHex(nr, nc, 'flash-spread flash-powerup', 600);
-  let extra = '';
-  if (sPU) extra = ' → ' + applyPowerup(sPU, nr, nc, owner);
-  return '🌀 Spread!' + extra;
-  }
+case 'spread': {
+        const neutralNeigh = getNeighbors(r, c).filter(([nr,nc]) => grid[nr][nc].owner === NEUTRAL);
+        if (neutralNeigh.length === 0) return '🌀 Spread! (no neutral)';
+        const pickIndex = gameMode === 'online' ? seededRand(neutralNeigh.length) : randInt(neutralNeigh.length);
+        const [nr, nc] = neutralNeigh[pickIndex];
+        const sPU = grid[nr][nc].powerup;
+        grid[nr][nc] = makeCell(owner, Math.max(1, Math.floor(cell.power / 2)));
+        grid[nr][nc].powerup = sPU;
+        flashHex(nr, nc, 'flash-spread flash-powerup', 600);
+        let extra = '';
+        if (sPU) extra = ' → ' + applyPowerup(sPU, nr, nc, owner);
+        return '🌀 Spread!' + extra;
+      }
+    }   // ← closes switch
+  }     // ← closes applyPowerup function  ← THIS WAS MISSING
 
   function flashHex(r, c, cls, dur) {
     const key = `${r},${c}`;
