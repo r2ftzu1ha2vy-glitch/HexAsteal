@@ -17,7 +17,7 @@
       <div class="hud-section stage-section">
         <span class="label">STAGE</span>
         <span id="stage-num" class="value">1</span>
-        <span id="boss-badge" class="boss-badge hidden">👹</span>
+        <span id="boss-badge" class="boss-badge hidden">𖤐</span>
       </div>
       <div class="hud-section turn-section">
         <span class="label">TURN</span>
@@ -29,18 +29,18 @@
         <span class="label" id="p-label">YOU</span>
         <span id="p-hexes" class="value">4</span>
         <span class="sep">·</span>
-        <span class="icon">⚡</span><span id="p-power" class="value">14</span>
+        <span class="icon">⚡︎</span><span id="p-power" class="value">14</span>
       </div>
       <div class="hud-section enemy-section">
         <span class="color-dot enemy-dot" id="enemy-dot"></span>
         <span class="label" id="foe-label">FOE</span>
         <span id="e-hexes" class="value">4</span>
         <span class="sep">·</span>
-        <span class="icon">⚡</span><span id="e-power" class="value">14</span>
+        <span class="icon">⚡︎</span><span id="e-power" class="value">14</span>
       </div>
       <!-- FIX: Shop button is now INSIDE #hud, uses HexAsteal.showShop() -->
       <button id="btn-shop" class="hud-shop-btn" onclick="HexAsteal.showShop()" title="Open Shop">🛒 0</button>
-      <button id="btn-sound" onclick="HexAsteal.toggleSound()" title="Toggle Sound">🔊</button>
+      <button id="btn-sound" onclick="HexAsteal.toggleSound()" title="Toggle Sound">🕪</button>
     </header>
 
     <!-- Power-up Legend -->
@@ -63,12 +63,12 @@
       <div id="status">Select one of your hexes to attack from</div>
       <div id="buttons">
         <button id="btn-skip" onclick="HexAsteal.skipAttack()">Skip Attack</button>
-        <button id="btn-stages" onclick="HexAsteal.showStages()">📋 Stages</button>
+        <button id="btn-stages" onclick="HexAsteal.showStages()">☰ Stages</button>
         <button id="btn-restart" onclick="HexAsteal.restartStage()">Restart</button>
-        <button id="btn-mode" onclick="HexAsteal.showModeSelect()">🎮 Mode</button>
+        <button id="btn-mode" onclick="HexAsteal.showModeSelect()">🖳 Mode</button>
       </div>
       <div id="rules-hint">
-        💡 Hexes grow <strong>+1</strong>/turn. Attack when higher. <strong>🔄 Transfer</strong> power to friendly hexes. Ties = -1 power. Grab <strong>colored hexes</strong> for power-ups!
+        ✴︎ Hexes grow <strong>+1</strong>/turn. Attack when higher. <strong>⇄ Transfer</strong> power to friendly hexes. Ties = -1 power. Grab <strong>colored hexes</strong> for power-ups!
       </div>
     </footer>
   </div>
@@ -118,10 +118,10 @@
   <!-- Stage Select Overlay -->
   <div id="stages-overlay" class="overlay-screen hidden">
     <div class="overlay-card stages-card">
-      <h2>📋 Stage Select</h2>
+      <h2>☰ Stage Select</h2>
       <div id="stage-grid"></div>
       <div class="stages-footer">
-        <button class="btn-ghost" onclick="HexAsteal.replayTutorial()">📖 Tutorial</button>
+        <button class="btn-ghost" onclick="HexAsteal.replayTutorial()">🕮 Tutorial</button>
         <button class="btn-primary" onclick="HexAsteal.closeStages()">Close</button>
       </div>
     </div>
@@ -142,21 +142,21 @@
   <!-- Mode Select Overlay -->
   <div id="mode-overlay" class="overlay-screen hidden">
     <div class="overlay-card mode-card">
-      <h2>🎮 Game Mode</h2>
+      <h2>🖳 Game Mode</h2>
       <p class="mode-sub">Choose how you want to play</p>
       <div class="mode-grid">
         <button class="mode-btn" id="mode-btn-ai" onclick="HexAsteal.selectMode('ai')">
-          <span class="mode-icon">🤖</span>
+          <span class="mode-icon">⚛</span>
           <span class="mode-label">vs Computer</span>
           <span class="mode-desc">Solo campaign with boss stages</span>
         </button>
         <button class="mode-btn" id="mode-btn-local" onclick="HexAsteal.selectMode('local')">
-          <span class="mode-icon">👥</span>
+          <span class="mode-icon">𐀪𐀪</span>
           <span class="mode-label">Local 2P</span>
           <span class="mode-desc">Pass &amp; play on same device</span>
         </button>
         <button class="mode-btn" id="mode-btn-online" onclick="HexAsteal.selectMode('online')">
-          <span class="mode-icon">🌐</span>
+          <span class="mode-icon">🗺</span>
           <span class="mode-label">Online 2P</span>
           <span class="mode-desc">Play with friend via room code</span>
         </button>
@@ -168,13 +168,13 @@
   <!-- Online Lobby Overlay (single, no duplicate) -->
   <div id="online-overlay" class="overlay-screen hidden">
     <div class="overlay-card online-card">
-      <h2 id="online-title">🌐 Online Play</h2>
+      <h2 id="online-title">🗺 Online Play</h2>
 
       <div id="online-create-join">
         <p class="mode-sub">Create a new room or join an existing one</p>
         <div class="online-btns">
-          <button class="btn-primary" onclick="HexAsteal.onlineCreate()">➕ Create Room</button>
-          <button class="btn-ghost" onclick="HexAsteal.showJoinRoom()">🔑 Join Room</button>
+          <button class="btn-primary" onclick="HexAsteal.onlineCreate()">✚ Create Room</button>
+          <button class="btn-ghost" onclick="HexAsteal.showJoinRoom()">ꗃ Join Room</button>
         </div>
       </div>
 
@@ -196,7 +196,7 @@
         <div class="room-code-display">
           <span class="room-code-label">ROOM CODE</span>
           <span id="room-code-big" class="room-code-big">----</span>
-          <button class="copy-btn" onclick="HexAsteal.copyRoomCode()" title="Copy code">📋</button>
+          <button class="copy-btn" onclick="HexAsteal.copyRoomCode()" title="Copy code">☰</button>
         </div>
         <p class="mode-sub" id="waiting-text">Waiting for opponent to join…</p>
         <div class="waiting-dots"><span></span><span></span><span></span></div>
@@ -229,12 +229,12 @@
   <!-- Rematch Overlay -->
   <div id="rematch-overlay" class="overlay-screen hidden">
     <div class="overlay-card rematch-card">
-      <div id="rematch-icon" class="rematch-icon">🔄</div>
+      <div id="rematch-icon" class="rematch-icon">⟳</div>
       <h2 id="rematch-title">Rematch?</h2>
       <p id="rematch-sub">Waiting for opponent…</p>
       <div class="rematch-btns">
-        <button class="btn-primary" id="btn-rematch-yes" onclick="HexAsteal.voteRematch(true)">✅ Rematch</button>
-        <button class="btn-ghost"   id="btn-rematch-no"  onclick="HexAsteal.voteRematch(false)">❌ Leave</button>
+        <button class="btn-primary" id="btn-rematch-yes" onclick="HexAsteal.voteRematch(true)">⟳ Rematch</button>
+        <button class="btn-ghost"   id="btn-rematch-no"  onclick="HexAsteal.voteRematch(false)">✖ Leave</button>
       </div>
       <div id="rematch-dots" class="waiting-dots hidden"><span></span><span></span><span></span></div>
     </div>
@@ -252,9 +252,9 @@
 
       <div class="shop-tabs">
         <!-- FIX: switchTab now calls HexAsteal.switchTab -->
-        <button class="tab-btn active" onclick="HexAsteal.switchTab('colors')">🎨 Colors</button>
-        <button class="tab-btn" onclick="HexAsteal.switchTab('designs')">✏️ Designs</button>
-        <button class="tab-btn" onclick="HexAsteal.switchTab('cosmetics')">✨ Cosmetics</button>
+        <button class="tab-btn active" onclick="HexAsteal.switchTab('colors')">🖍 Colors</button>
+        <button class="tab-btn" onclick="HexAsteal.switchTab('designs')">ʚɞ Designs</button>
+        <button class="tab-btn" onclick="HexAsteal.switchTab('cosmetics')">☆ Cosmetics</button>
       </div>
 
       <div id="shop-colors" class="shop-grid"></div>
