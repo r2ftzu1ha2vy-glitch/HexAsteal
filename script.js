@@ -44,12 +44,12 @@ const HexAsteal = (function () {
   const DIRS_ODD  = [[-1,0],[-1,1],[0,1],[1,1],[1,0],[0,-1]];
 
   const POWERUPS = {
-    surge:  { icon: '⚡' },
+    surge:  { icon: '⚡︎' },
     shield: { icon: '🛡' },
-    drain:  { icon: '💀' },
-    blaze:  { icon: '🔥' },
+    drain:  { icon: '☠︎︎' },
+    blaze:  { icon: 'ঌ' },
     freeze: { icon: '❄' },
-    spread: { icon: '🌀' }
+    spread: { icon: '𖦹' }
   };
   const PU_KEYS = Object.keys(POWERUPS);
 
@@ -141,15 +141,15 @@ const HexAsteal = (function () {
   // =========== TUTORIAL ===========
   const TUT = [
     { icon: '⬡', title: 'Welcome to HexAsteal!', text: 'A turn-based hex territory conquest game. Outsmart the enemy, capture power-ups, and conquer the board!' },
-    { icon: '🟢', title: 'Your Territory', text: 'Green hexes are yours. Each shows a power level (1–9). Grow your army and dominate!' },
-    { icon: '👆', title: 'Select & Attack', text: 'Click one of your hexes, then click an adjacent enemy or neutral hex to attack it.' },
-    { icon: '🔄', title: 'Transfer Power', text: 'Click your hex, then an adjacent friendly hex to give it power. Source keeps 1, target gains the rest (max 9).' },
-    { icon: '⚔️', title: 'Power Wins', text: 'Your power must be HIGHER than the target. Winner keeps the difference. Equal power? Attacker just loses 1.' },
-    { icon: '📈', title: 'Growth Phase', text: 'Every turn, all your hexes gain +1 power (max 9). Build up before striking!' },
-    { icon: '🎨', title: 'Power-Ups!', text: 'Colored hexes have power-ups: Surge (+3), Shield, Drain, Blaze (2×), Freeze, and Spread. Race to grab them!' },
+    { icon: '⬤', title: 'Your Territory', text: 'Green hexes are yours. Each shows a power level (1–9). Grow your army and dominate!' },
+    { icon: '☞', title: 'Select & Attack', text: 'Click one of your hexes, then click an adjacent enemy or neutral hex to attack it.' },
+    { icon: '⇄', title: 'Transfer Power', text: 'Click your hex, then an adjacent friendly hex to give it power. Source keeps 1, target gains the rest (max 9).' },
+    { icon: '⚔︎', title: 'Power Wins', text: 'Your power must be HIGHER than the target. Winner keeps the difference. Equal power? Attacker just loses 1.' },
+    { icon: '↗', title: 'Growth Phase', text: 'Every turn, all your hexes gain +1 power (max 9). Build up before striking!' },
+    { icon: '✦', title: 'Power-Ups!', text: 'Colored hexes have power-ups: Surge (+3), Shield, Drain, Blaze (2×), Freeze, and Spread. Race to grab them!' },
     { icon: '▲', title: 'Mountains', text: 'Dark hexes with ▲ are impassable. Use them as cover and chokepoints!' },
-    { icon: '👹', title: 'Boss Battles', text: 'Every 10th stage is a boss fight against HexAforce! Defeat the demon\'s mega-hex to win.' },
-    { icon: '🏆', title: 'Ready?', text: 'Capture all enemy hexes or have the most power when turns run out. Good luck, commander!' }
+    { icon: '𖤐', title: 'Boss Battles', text: 'Every 10th stage is a boss fight against HexAforce! Defeat the demon\'s mega-hex to win.' },
+    { icon: '𐃯', title: 'Ready?', text: 'Capture all enemy hexes or have the most power when turns run out. Good luck, commander!' }
   ];
 
   // =========== STAGE CONFIG ===========
@@ -233,11 +233,11 @@ const HexAsteal = (function () {
       earnings = pHexes * 5;
       progress.hexoneX += earnings;
       // Brief flash — showEnd() will overwrite after 1.5s
-      setStatus(`+${earnings} HexoneX! 💰 (Win Bonus)`);
+      setStatus(`+${earnings} HexoneX! ⌬ (Win Bonus)`);
     } else {
       earnings = -(Math.floor(pHexes / 2) * 2);
       progress.hexoneX = Math.max(0, progress.hexoneX + earnings);
-      setStatus(`${earnings} HexoneX 💸 (Loss Penalty)`);
+      setStatus(`${earnings} HexoneX ⌬ (Loss Penalty)`);
     }
     saveProgress();
     updateShopButton();
@@ -259,11 +259,11 @@ const HexAsteal = (function () {
       progress.ownedSkins[type].push(id);
       progress.hexoneX -= price;
       saveProgress();
-      setStatus(`✅ Bought ${skin.name}!`);
+      setStatus(`☑ Bought ${skin.name}!`);
     } else {
       progress.equippedSkins[type === 'colors' ? 'color' : type === 'designs' ? 'design' : 'cosmetic'] = id;
       saveProgress();
-      setStatus(`🎨 Equipped ${skin.name}!`);
+      setStatus(`🖍 Equipped ${skin.name}!`);
     }
     showShop();
     updateShopButton();
@@ -272,7 +272,7 @@ const HexAsteal = (function () {
 
   function updateShopButton() {
     const btn = document.getElementById('btn-shop');
-    if (btn) btn.textContent = `🛒 ${progress.hexoneX}`;
+    if (btn) btn.textContent = `𖠩 ${progress.hexoneX}`;
   }
 
   function showShop() {
@@ -655,11 +655,11 @@ const HexAsteal = (function () {
             el.polygon.style.filter = '';
         }
 
-        el.bossIcon.textContent = (cell.boss && cell.owner === ENEMY) ? '👹' : '';
+        el.bossIcon.textContent = (cell.boss && cell.owner === ENEMY) ? '𖤐' : '';
         if (cell.boss && cell.owner === ENEMY) el.polygon.style.filter = 'url(#glow-boss)';
 
         let st = '';
-        if (cell.blazeBuffed) st += '🔥';
+        if (cell.blazeBuffed) st += 'ঌ';
         if (cell.shielded) st += '🛡';
         if (cell.frozen) st += '❄';
         el.statusIcon.textContent = st;
@@ -722,7 +722,7 @@ const HexAsteal = (function () {
   function renderTutStep() {
     const s = TUT[tutStep];
     tutIcon.textContent = s.icon; tutTitle.textContent = s.title; tutText.textContent = s.text;
-    tutNextBtn.textContent = tutStep === TUT.length - 1 ? '🎮 Play!' : 'Next →';
+    tutNextBtn.textContent = tutStep === TUT.length - 1 ? '🖳 Play!' : 'Next →';
     tutDots.innerHTML = '';
     TUT.forEach((_, i) => {
       const d = document.createElement('span');
@@ -775,7 +775,7 @@ const HexAsteal = (function () {
       if (locked) cell.classList.add('locked');
       if (boss) cell.classList.add('boss-stage');
       cell.innerHTML = boss
-        ? `<span class="stage-boss-icon">👹</span><span class="stage-num">${s}</span>`
+        ? `<span class="stage-boss-icon">𖤐</span><span class="stage-num">${s}</span>`
         : `<span class="stage-num">${s}</span>`;
       if (!locked) {
         cell.addEventListener('click', () => {
@@ -844,7 +844,7 @@ const HexAsteal = (function () {
     localTurnBanner.classList.add('hidden');
     phase = 'select';
     const who = localTurn === PLAYER ? 'Player 1 (green)' : 'Player 2 (blue)';
-    setStatus(`${who} — select a hex to attack or 🔄 transfer`);
+    setStatus(`${who} — select a hex to attack or ⇄ transfer`);
     render();
   }
 
@@ -1077,10 +1077,10 @@ const HexAsteal = (function () {
     initChat();
 
     if (onlineSide === PLAYER) {
-      setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
+      setStatus('𖡎 Your turn (🟢 P1) — select a hex to attack or ⇄ transfer');
     } else {
       phase = 'wait-online';
-      setStatus('🌐 Waiting for P1 to move…');
+      setStatus('⏱ Waiting for P1 to move…');
     }
     render();
   }
@@ -1203,7 +1203,7 @@ const HexAsteal = (function () {
     const noBtn   = document.getElementById('btn-rematch-no');
     const dots    = document.getElementById('rematch-dots');
 
-    icon.textContent  = iWon ? '🏆' : '😤';
+    icon.textContent  = iWon ? '𐃯' : '☠︎︎';
     title.textContent = iWon ? 'You Won!' : 'You Lost!';
     sub.textContent   = 'Waiting for opponent…';
     yesBtn.disabled   = false;
@@ -1401,7 +1401,7 @@ const HexAsteal = (function () {
     growPhaseOwner(onlineSide);
     phase = 'select';
     const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
-    setStatus(`🌐 Your turn (${label}) — select a hex`);
+    setStatus(`𖡎 Your turn (${label}) — select a hex`);
     render();
   }
 
@@ -1450,8 +1450,8 @@ const HexAsteal = (function () {
       showLocalTurnBanner();
     } else if (gameMode === 'ai') {
       setStatus(cfg.isBoss
-        ? `⚔️ Boss battle! Defeat ${cfg.bossName}!`
-        : 'Your hexes grew +1 · select a hex to attack or 🔄 transfer');
+        ? `⚔︎ Boss battle! Defeat ${cfg.bossName}!`
+        : 'Your hexes grew +1 · select a hex to attack or ⇄ transfer');
     }
   }
 
@@ -1504,8 +1504,8 @@ const HexAsteal = (function () {
       if (targets.length === 0 && transfers.length === 0) { setStatus('No valid targets from that hex.'); return; }
       selectedHex = [r, c]; validTargets = targets; transferTargets = transfers; phase = 'target';
       SFX.select();
-      const bNote = cell.blazeBuffed ? ' 🔥 Blaze active — 2× damage!' : '';
-      const tNote = transfers.length > 0 ? ' · 🔄 friendly = transfer' : '';
+      const bNote = cell.blazeBuffed ? ' ঌ Blaze active — 2× damage!' : '';
+      const tNote = transfers.length > 0 ? ' · ⇄ friendly = transfer' : '';
       setStatus(`Power ${cell.power} selected · choose target${bNote}${tNote}`);
       render(); return;
     }
@@ -1520,8 +1520,8 @@ const HexAsteal = (function () {
         if (targets.length === 0 && transfers.length === 0) { setStatus('No targets.'); return; }
         selectedHex = [r, c]; validTargets = targets; transferTargets = transfers;
         SFX.select();
-        const bNote = cell.blazeBuffed ? ' 🔥 2×!' : '';
-        const tNote = transfers.length > 0 ? ' · 🔄' : '';
+        const bNote = cell.blazeBuffed ? ' ঌ 2×!' : '';
+        const tNote = transfers.length > 0 ? ' · ⇄' : '';
         setStatus(`Power ${cell.power} selected${bNote}${tNote}`);
         render(); return;
       }
@@ -1533,7 +1533,7 @@ const HexAsteal = (function () {
   function deselect() {
     selectedHex = null; validTargets = []; transferTargets = []; phase = 'select';
     SFX.deselect();
-    setStatus('Select a hex to attack or 🔄 transfer power');
+    setStatus('Select a hex to attack or ⇄ transfer power');
     render();
   }
 
@@ -1549,7 +1549,7 @@ const HexAsteal = (function () {
     SFX.transfer();
     flashHex(sr, sc, 'flash-transfer-out', 400);
     flashHex(dr, dc, 'flash-transfer-in', 400);
-    setStatus(`🔄 Transferred ${actual} power`);
+    setStatus(`⇄ Transferred ${actual} power`);
     selectedHex = null; validTargets = []; transferTargets = [];
     render();
 
@@ -1584,19 +1584,19 @@ const HexAsteal = (function () {
       if (wasBoss) { flashHex(dr, dc, 'flash-boss-die', 800); SFX.bossDefeat(); }
       else { flashHex(dr, dc, 'flash-capture', 550); SFX.capture(); }
 
-      let msg = `✅ Captured! ${wasBlazed ? aPow+' (🔥2×)' : aPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`;
-      if (wasBoss) msg = `💀 ${cfg.bossName} DESTROYED! ${msg}`;
+      let msg = `☑ Captured! ${wasBlazed ? aPow+' (ঌ2×)' : aPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`;
+      if (wasBoss) msg = `☠︎ ${cfg.bossName} DESTROYED! ${msg}`;
       if (capturedPU) { SFX.powerup(); msg += ' · ' + applyPowerup(capturedPU, dr, dc, src.owner); }
       setStatus(msg);
     } else if (aPow === defPow) {
       src.power = Math.max(1, src.power - 1);
       flashHex(sr, sc, 'flash-fail', 550); SFX.fail();
-      setStatus(`⚔️ Tied ${aPow} vs ${defPow} — deflected!`);
+      setStatus(`⚔︎ Tied ${aPow} vs ${defPow} — deflected!`);
     } else {
       src.power = 1;
       if (dst.power > 1) dst.power -= 1;
       flashHex(sr, sc, 'flash-fail', 550); SFX.fail();
-      setStatus(`❌ Failed ${wasBlazed ? aPow+' (🔥2×)' : aPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`);
+      setStatus(`✖ Failed ${wasBlazed ? aPow+' (ঌ2×)' : aPow} vs ${wasShielded ? defPow+' (🛡+3)' : defPow}`);
     }
 
     selectedHex = null; validTargets = []; transferTargets = [];
@@ -1628,7 +1628,7 @@ const HexAsteal = (function () {
       growPhaseOwner(opponentOwner());
       turn++;
       phase = 'wait-online';
-      setStatus('🌐 Waiting for opponent…');
+      setStatus('⏱ Waiting for opponent…');
       render();
     }
   }
@@ -1640,7 +1640,7 @@ const HexAsteal = (function () {
       case 'surge':
         cell.power = Math.min(cell.power + 3, MAX_POWER);
         flashHex(r, c, 'flash-surge flash-powerup', 600);
-        return '⚡ Surge! +3 power';
+        return '⚡︎ Surge! +3 power';
       case 'shield':
         cell.shielded = true;
         flashHex(r, c, 'flash-shield flash-powerup', 600);
@@ -1656,12 +1656,12 @@ const HexAsteal = (function () {
         }
         cell.power = Math.min(cell.power + drained, MAX_POWER);
         flashHex(r, c, 'flash-drain flash-powerup', 600);
-        return `💀 Drain! Stole ${drained}`;
+        return `☠︎︎ Drain! Stole ${drained}`;
       }
       case 'blaze':
         cell.blazeBuffed = true;
         flashHex(r, c, 'flash-blaze flash-powerup', 600);
-        return '🔥 Blaze! 2×';
+        return 'ঌ Blaze! 2×';
       case 'freeze': {
         const foes = [PLAYER, PLAYER2, ENEMY].filter(o => o !== owner);
         let froze = 0;
@@ -1682,7 +1682,7 @@ const HexAsteal = (function () {
         flashHex(nr, nc, 'flash-spread flash-powerup', 600);
         let extra = '';
         if (sPU) extra = ' → ' + applyPowerup(sPU, nr, nc, owner);
-        return '🌀 Spread!' + extra;
+        return '𖦹 Spread!' + extra;
       }
     }
   }
@@ -1770,21 +1770,21 @@ const HexAsteal = (function () {
           dst.blazeBuffed = false; dst.frozen = false;
           flashHex(best.dr, best.dc, 'flash-ai-capture', 500);
           SFX.attack();
-          let msg = `⚔️ Enemy captured! (${wasBlazed ? aPow+' 🔥' : aPow} vs ${wasShielded ? dPow+' 🛡' : dPow})`;
+          let msg = `⚔︎ Enemy captured! (${wasBlazed ? aPow+' 🔥' : aPow} vs ${wasShielded ? dPow+' 🛡' : dPow})`;
           if (capPU) msg += ' · ' + applyPowerup(capPU, best.dr, best.dc, ENEMY);
           setStatus(msg);
         } else if (aPow === dPow) {
           src.power = Math.max(1, src.power-1);
-          setStatus('⚔️ Enemy tied!');
+          setStatus('⚔︎ Enemy tied!');
         } else {
           src.power = 1; if (dst.power>1) dst.power-=1;
-          setStatus('⚔️ Enemy failed!');
+          setStatus('⚔︎ Enemy failed!');
         }
         render();
         setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 550);
       }, 400);
     } else {
-      setStatus('⚔️ Enemy skipped');
+      setStatus('⚔︎ Enemy skipped');
       setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 350);
     }
   }
@@ -1798,7 +1798,7 @@ const HexAsteal = (function () {
       setTimeout(() => { if (!checkGameOver()) beginAITurn(); }, 500);
       return;
     }
-    setStatus('Your hexes grew +1 · select a hex to attack or 🔄 transfer');
+    setStatus('Your hexes grew +1 · select a hex to attack or ⇄ transfer');
     render();
   }
 
@@ -1844,9 +1844,9 @@ const HexAsteal = (function () {
       awardHexoneX(pH, 0, won);
       // FIX #3: Delay showEnd so HexoneX award message is briefly visible
       setTimeout(() => {
-        if (won) showEnd('Victory!', `Time's up — you win! ⚡${pS} vs ⚡${eS}`, 'win');
-        else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡${eS} vs ⚡${pS}`, 'lose');
-        else showEnd('Draw', `Tied at ⚡${pS}!`, 'draw');
+        if (won) showEnd('Victory!', `Time's up — you win! ⚡︎${pS} vs ⚡︎${eS}`, 'win');
+        else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡︎${eS} vs ⚡︎${pS}`, 'lose');
+        else showEnd('Draw', `Tied at ⚡︎${pS}!`, 'draw');
       }, 800);
       return true;
     }
@@ -1880,11 +1880,11 @@ const HexAsteal = (function () {
       awardHexoneX(win1 ? p1H : p2H, win1 ? p2H : p1H, win1 === (p1Name !== 'Opponent'));
       setTimeout(() => {
         if (p1S > p2S) {
-          showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
+          showEnd(`${p1Name} Wins!`, `Time's up! ⚡︎${p1S} vs ⚡︎${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
         } else if (p2S > p1S) {
-          showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
+          showEnd(`${p2Name} Wins!`, `Time's up! ⚡︎${p2S} vs ⚡︎${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
         } else {
-          showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
+          showEnd('Draw!', `Tied at ⚡︎${p1S}!`, 'draw');
         }
       }, 800);
       return true;
@@ -1902,7 +1902,7 @@ const HexAsteal = (function () {
       SFX.victory();
       if (gameMode === 'ai') stageWon();
       btnNext.textContent = gameMode === 'ai'
-        ? (currentStage >= TOTAL_STAGES ? '🏆 All Stages!' : 'Next Stage →')
+        ? (currentStage >= TOTAL_STAGES ? '𐃯 All Stages!' : 'Next Stage →')
         : 'Play Again';
       btnNext.classList.remove('hidden');
     } else if (type === 'draw') {
@@ -1953,14 +1953,14 @@ const HexAsteal = (function () {
         growPhaseOwner(opponentOwner());
         turn++;
         phase = 'wait-online';
-        setStatus('🌐 Waiting for opponent…'); render();
+        setStatus('⏱ Waiting for opponent…'); render();
       }
     }, 300);
   }
 
   function toggleSound() {
     SFX.on = !SFX.on; progress.soundOn = SFX.on; saveProgress();
-    btnSound.textContent = SFX.on ? '🔊' : '🔇';
+    btnSound.textContent = SFX.on ? '🕪' : '🕪×';
     if (SFX.on) SFX.click();
   }
 
@@ -2009,7 +2009,7 @@ const HexAsteal = (function () {
 
     loadProgress();
     updateShopButton();
-    btnSound.textContent = SFX.on ? '🔊' : '🔇';
+    btnSound.textContent = SFX.on ? '🕪' : '🕪×';
 
     if (!progress.tutDone) showTutorial();
     else startStage(progress.stage);
