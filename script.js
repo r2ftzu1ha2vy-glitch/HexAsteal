@@ -24,6 +24,12 @@ let moveListener = null;
 let statusListener = null;
 let roomListener = null;
 let lastSeenMsgId = null;
+let chatOpen      = false;
+let chatListener  = null;
+let unreadCount   = 0;
+let rematchVoted  = false;          // did I vote?
+let rematchListener = null;
+let rematchTimeout  = null;
 
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
@@ -810,13 +816,22 @@ const HexAsteal = (function () {
     });
   }
 
-  function cancelOnline() {
-    SFX.click();
-    cleanupListeners();
+function cancelOnline() {
+  SFX.click();
+  cleanupListeners();
+  cleanupRematch();     // ← add this
+  teardownChat();       // ← add this
 
-    if (dbRef && roomCode && onlineSide === PLAYER) {
-      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
-    }
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+  }
+
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  onlineOverlay.classList.add('hidden');
+  if (gameMode === 'online') gameMode = 'ai';
+}
 
     dbRef = null;
     roomCode = null;
@@ -843,21 +858,22 @@ const HexAsteal = (function () {
     }
   }
 
-  function sendOnline(msg) {
-    if (!roomCode) return;
-    const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
-    const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-    const payload = {
-      msgId,
-      sender: onlineSide,
-      type: msg.type,
-      move: msg.move || null,
-      turn,
-      ts: Date.now()
-    };
-    update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
-      .catch(err => console.error('Send move failed:', err));
-  }
+function sendOnline(msg) {
+  if (!roomCode) return;
+  const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  const payload = {
+    msgId,
+    sender: onlineSide,
+    type: msg.type,
+    move: msg.move || null,
+    turn,
+    ts: Date.now()
+  };
+  update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
+    .catch(err => console.error('Send move failed:', err));
+}
+
 
   function handleOnlineMessage(data) {
     if (!data || !data.type) return;
@@ -891,14 +907,251 @@ const HexAsteal = (function () {
     SFX.stageStart();
     render();
 
-    if (onlineSide === PLAYER) {
-      setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
-    } else {
-      phase = 'wait-online';
-      setStatus('🌐 Waiting for P1 to move…');
-    }
     render();
+initChat();
+
+if (onlineSide === PLAYER) {
+  setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
+} else {
+  phase = 'wait-online';
+  setStatus('🌐 Waiting for P1 to move…');
+}
+render();
   }
+
+  // =========== CHAT ===========
+function initChat() {
+  const panel = document.getElementById('chat-panel');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+  panel.classList.add('collapsed');
+  chatOpen = false;
+  unreadCount = 0;
+  document.getElementById('chat-messages').innerHTML = '';
+  appendSystemMsg('Chat connected · say hi!');
+
+  if (chatListener && roomCode) {
+    try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
+  }
+
+  chatListener = onValue(ref(database, `rooms/${roomCode}/chat`), (snap) => {
+    const msgs = snap.val();
+    if (!msgs) return;
+    const container = document.getElementById('chat-messages');
+    const keys = Object.keys(msgs).sort();
+
+    // Only render messages we haven't rendered yet
+    const rendered = new Set([...container.querySelectorAll('[data-msgkey]')].map(el => el.dataset.msgkey));
+    let added = 0;
+    for (const k of keys) {
+      if (rendered.has(k)) continue;
+      const m = msgs[k];
+      const isMe = m.sender === onlineSide;
+      const div = document.createElement('div');
+      div.dataset.msgkey = k;
+      div.className = 'chat-msg ' + (isMe ? 'chat-msg-me' : 'chat-msg-them');
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'chat-msg-name';
+      nameDiv.textContent = isMe ? 'You' : 'Opponent';
+      div.appendChild(nameDiv);
+      div.appendChild(document.createTextNode(m.text));
+      container.appendChild(div);
+      added++;
+    }
+    if (added > 0) {
+      container.scrollTop = container.scrollHeight;
+      if (!chatOpen) {
+        unreadCount += added;
+        const badge = document.getElementById('chat-unread');
+        badge.textContent = unreadCount;
+        badge.classList.remove('hidden');
+      }
+    }
+  });
+
+  // Enter key to send
+  const input = document.getElementById('chat-input');
+  input.onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
+}
+
+function appendSystemMsg(text) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-system';
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function toggleChat() {
+  SFX.click();
+  const panel = document.getElementById('chat-panel');
+  chatOpen = !chatOpen;
+  panel.classList.toggle('collapsed', !chatOpen);
+  if (chatOpen) {
+    unreadCount = 0;
+    const badge = document.getElementById('chat-unread');
+    badge.classList.add('hidden');
+    badge.textContent = '0';
+    setTimeout(() => {
+      const container = document.getElementById('chat-messages');
+      if (container) container.scrollTop = container.scrollHeight;
+      document.getElementById('chat-input').focus();
+    }, 50);
+  }
+}
+
+function sendChat() {
+  if (!roomCode) return;
+  const input = document.getElementById('chat-input');
+  const text = (input.value || '').trim();
+  if (!text) return;
+  input.value = '';
+  SFX.click();
+  const key = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  set(ref(database, `rooms/${roomCode}/chat/${key}`), {
+    sender: onlineSide,
+    text: text.slice(0, 80),
+    ts: Date.now()
+  }).catch(console.error);
+}
+
+function teardownChat() {
+  const panel = document.getElementById('chat-panel');
+  if (panel) panel.classList.add('hidden');
+  if (chatListener && roomCode) {
+    try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
+    chatListener = null;
+  }
+  chatOpen = false;
+  unreadCount = 0;
+}
+
+// =========== REMATCH ===========
+function showRematch(iWon) {
+  rematchVoted = false;
+  const overlay = document.getElementById('rematch-overlay');
+  const icon    = document.getElementById('rematch-icon');
+  const title   = document.getElementById('rematch-title');
+  const sub     = document.getElementById('rematch-sub');
+  const yesBtn  = document.getElementById('btn-rematch-yes');
+  const noBtn   = document.getElementById('btn-rematch-no');
+  const dots    = document.getElementById('rematch-dots');
+
+  icon.textContent  = iWon ? '🏆' : '😤';
+  title.textContent = iWon ? 'You Won!' : 'You Lost!';
+  sub.textContent   = 'Waiting for opponent…';
+  yesBtn.disabled   = false;
+  noBtn.disabled    = false;
+  dots.classList.add('hidden');
+
+  overlay.classList.remove('hidden');
+
+  // Clear any previous rematch data
+  update(ref(database, `rooms/${roomCode}`), {
+    [`rematch_${onlineSide}`]: null
+  }).catch(console.error);
+
+  // Listen for both votes
+  rematchListener = onValue(ref(database, `rooms/${roomCode}`), (snap) => {
+    const data = snap.val();
+    if (!data) return;
+    const myVote   = data[`rematch_${onlineSide}`];
+    const oppSide  = onlineSide === PLAYER ? PLAYER2 : PLAYER;
+    const oppVote  = data[`rematch_${oppSide}`];
+
+    if (myVote === true && oppVote === true) {
+      // Both want rematch — start a new game
+      cleanupRematch();
+      overlay.classList.add('hidden');
+      const newSeed = onlineSide === PLAYER
+        ? ((Date.now() & 0xffff) + Math.floor(Math.random() * 1000))
+        : null;
+      if (onlineSide === PLAYER) {
+        update(ref(database, `rooms/${roomCode}`), { rematchSeed: newSeed, rematchSeedSet: true })
+          .catch(console.error);
+        doOnlineRematch(newSeed);
+      } else {
+        // P2 waits for seed from P1 — already received if oppVote set first
+        if (data.rematchSeed) doOnlineRematch(data.rematchSeed);
+        else {
+          // Wait briefly for seed to arrive
+          const seedWait = onValue(ref(database, `rooms/${roomCode}/rematchSeed`), (seedSnap) => {
+            if (seedSnap.val()) {
+              off(ref(database, `rooms/${roomCode}/rematchSeed`));
+              doOnlineRematch(seedSnap.val());
+            }
+          });
+        }
+      }
+    } else if (myVote === false || oppVote === false) {
+      // Someone said no — end session
+      cleanupRematch();
+      overlay.classList.add('hidden');
+      cancelOnline();
+    }
+  });
+
+  // Auto-timeout after 30s
+  rematchTimeout = setTimeout(() => {
+    cleanupRematch();
+    overlay.classList.add('hidden');
+    appendSystemMsg('Rematch timed out.');
+    cancelOnline();
+  }, 30000);
+}
+
+function voteRematch(yes) {
+  if (rematchVoted) return;
+  rematchVoted = true;
+  SFX.click();
+
+  const yesBtn = document.getElementById('btn-rematch-yes');
+  const noBtn  = document.getElementById('btn-rematch-no');
+  const sub    = document.getElementById('rematch-sub');
+  const dots   = document.getElementById('rematch-dots');
+
+  yesBtn.disabled = true;
+  noBtn.disabled  = true;
+
+  update(ref(database, `rooms/${roomCode}`), {
+    [`rematch_${onlineSide}`]: yes
+  }).catch(console.error);
+
+  if (yes) {
+    sub.textContent = 'Waiting for opponent…';
+    dots.classList.remove('hidden');
+  } else {
+    sub.textContent = 'Leaving…';
+  }
+}
+
+function cleanupRematch() {
+  if (rematchTimeout) { clearTimeout(rematchTimeout); rematchTimeout = null; }
+  if (rematchListener && roomCode) {
+    try { off(ref(database, `rooms/${roomCode}`)); } catch (e) {}
+    rematchListener = null;
+  }
+  rematchVoted = false;
+}
+
+function doOnlineRematch(seed) {
+  // Reset rematch flags in Firebase
+  update(ref(database, `rooms/${roomCode}`), {
+    rematch_player: null, rematch_player2: null,
+    rematchSeed: null, rematchSeedSet: null,
+    p1_move: null, p2_move: null,
+    chat: null
+  }).catch(console.error);
+
+  lastSeenMsgId = null;
+  document.getElementById('chat-messages').innerHTML = '';
+  appendSystemMsg('Rematch started!');
+
+  startOnlineGame(onlineSide === PLAYER, seed);
+  startOnlineMoveListener();
+}
 
   function generateMapSeeded(seed) {
     _rngSeed = seed;
@@ -1464,28 +1717,36 @@ const HexAsteal = (function () {
     resultTitle.className = type;
     resultDesc.textContent = desc;
 
-    if (type === 'win') {
-      SFX.victory();
-      if (gameMode === 'ai') stageWon();
-      btnNext.textContent = gameMode === 'ai'
-        ? (currentStage >= TOTAL_STAGES ? '🏆 All Stages!' : 'Next Stage →')
-        : 'Play Again';
-      btnNext.classList.remove('hidden');
-    } else if (type === 'draw') {
-      SFX.defeat();
-      btnNext.textContent = 'Play Again';
-      btnNext.classList.remove('hidden');
-    } else {
-      SFX.defeat();
-      if (gameMode !== 'ai') {
-        btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
-      } else {
-        btnNext.classList.add('hidden');
-      }
-    }
+if (type === 'win') {
+  SFX.victory();
+  if (gameMode === 'ai') stageWon();
+  btnNext.textContent = gameMode === 'ai'
+    ? (currentStage >= TOTAL_STAGES ? '🏆 All Stages!' : 'Next Stage →')
+    : 'Play Again';
+  btnNext.classList.remove('hidden');
+} else if (type === 'draw') {
+  SFX.defeat();
+  btnNext.textContent = 'Play Again';
+  btnNext.classList.remove('hidden');
+} else {
+  SFX.defeat();
+  if (gameMode !== 'ai') {
+    btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
+  } else {
+    btnNext.classList.add('hidden');
+  }
+}
 
-    goOverlay.classList.remove('hidden');
-    setStatus(title); render();
+// For online, replace the game-over overlay with the rematch screen
+if (gameMode === 'online') {
+  goOverlay.classList.add('hidden');
+  const iWon = type === 'win';
+  showRematch(iWon);
+  return;
+}
+
+goOverlay.classList.remove('hidden');
+setStatus(title); render();
   }
 
   function setStatus(msg) { statusEl.textContent = msg; }
@@ -1577,15 +1838,16 @@ const HexAsteal = (function () {
   document.addEventListener('DOMContentLoaded', init);
 
   // =========== PUBLIC API ===========
-  return {
-    skipAttack, restartStage, nextStage, startBoss,
-    showStages, closeStages, toggleSound,
-    nextTutorial, skipTutorial, replayTutorial,
-    showModeSelect, closeModeSelect, selectMode,
-    onlineCreate, showJoinRoom, onlineJoin,
-    showCreateJoin, cancelOnline, copyRoomCode,
-    dismissLocalBanner
-  };
+return {
+  skipAttack, restartStage, nextStage, startBoss,
+  showStages, closeStages, toggleSound,
+  nextTutorial, skipTutorial, replayTutorial,
+  showModeSelect, closeModeSelect, selectMode,
+  onlineCreate, showJoinRoom, onlineJoin,
+  showCreateJoin, cancelOnline, copyRoomCode,
+  dismissLocalBanner,
+  toggleChat, sendChat, voteRematch
+};
 })();
 
 window.HexAsteal = HexAsteal;
