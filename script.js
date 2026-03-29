@@ -1,8 +1,8 @@
-// =========== FIREBASE IMPORTS (add to top of game.js) ===========
+// =========== FIREBASE (loaded as module) ===========
+// index.html must load this file with: <script type="module" src="./script.js"></script>
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
 import { getDatabase, ref, set, update, onValue, off } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
-// =========== FIREBASE CONFIG (REPLACE WITH YOUR CONFIG) ===========
 const firebaseConfig = {
   apiKey: "AIzaSyCzTi3UMtCQPm4kXdtAqOzv-zyt1HDsBqo",
   authDomain: "hexasteal.firebaseapp.com",
@@ -13,17 +13,19 @@ const firebaseConfig = {
   appId: "1:390872116524:web:67fcc0a61b3f0a7ad8d089"
 };
 
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+const _app = initializeApp(firebaseConfig);
+const database = getDatabase(_app);
 
-// =========== GLOBAL FIREBASE VARIABLES ===========
+// =========== FIREBASE STATE (module-level, single source of truth) ===========
 let dbRef = null;
 let roomCode = null;
-let onlineSide = PLAYER;        // PLAYER (host) or PLAYER2 (guest)
+let onlineSide = 'player';      // set properly in onlineCreate / onlineJoin
 let moveListener = null;
 let statusListener = null;
 let roomListener = null;
 let lastSeenMsgId = null;
+
+// =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
 
@@ -32,7 +34,7 @@ const HexAsteal = (function () {
   const HEX_W = Math.sqrt(3) * HEX_R, ROW_H = HEX_R * 1.5;
   const PAD_X = HEX_W / 2 + 14, PAD_Y = HEX_R + 14;
   const PLAYER = 'player', ENEMY = 'enemy', NEUTRAL = 'neutral', BLOCKED = 'blocked';
-  const PLAYER2 = 'player2'; // local/online P2
+  const PLAYER2 = 'player2';
   const DIRS_EVEN = [[-1,-1],[-1,0],[0,1],[1,0],[1,-1],[0,-1]];
   const DIRS_ODD  = [[-1,0],[-1,1],[0,1],[1,1],[1,0],[0,-1]];
 
@@ -49,19 +51,7 @@ const HexAsteal = (function () {
   // =========== GAME MODE ===========
   // 'ai' | 'local' | 'online'
   let gameMode = 'ai';
-  // For local: whose turn — PLAYER or PLAYER2
   let localTurn = PLAYER;
-  // For online: which side am I? PLAYER (host) or PLAYER2 (guest)
-  let onlineSide = PLAYER;
-  let onlineRoomCode = null;
-
-  // =========== ONLINE RELAY (Gun.js + BroadcastChannel fallback) ===========
-  // Uses Gun.js decentralized real-time DB — no backend, works cross-device
-  let gun = null;
-  let gunRoom = null;
-  let pollInterval = null;
-  let lastSeenMsgId = null;
-  let onlineReady = false;
 
   // =========== SOUND ENGINE ===========
   const SFX = {
@@ -186,7 +176,6 @@ const HexAsteal = (function () {
     };
   }
 
-  // Multiplayer always uses a fixed balanced config
   function mpConfig() {
     return { maxTurns: 50, eHexes: 4, ePow: 4, pPow: 4, blocked: 5, pups: 8,
              isBoss: false, bossPow: 0, bossRegen: 1, bossName: null };
@@ -248,13 +237,11 @@ const HexAsteal = (function () {
     return getNeighbors(r, c).filter(([nr, nc]) => grid[nr][nc].owner === grid[r][c].owner);
   }
 
-  // Helper: whose owner token for current active player
   function activeOwner() {
     if (gameMode === 'local') return localTurn;
     if (gameMode === 'online') return onlineSide;
     return PLAYER;
   }
-  // Helper: the opponent owner for the active player
   function opponentOwner() {
     const ao = activeOwner();
     if (gameMode === 'ai') return ENEMY;
@@ -266,7 +253,6 @@ const HexAsteal = (function () {
   function makeCell(owner, power) {
     return { owner, power, powerup: null, blazeBuffed: false, shielded: false, frozen: false, boss: false };
   }
-
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = randInt(i + 1);
@@ -283,16 +269,13 @@ const HexAsteal = (function () {
     }
 
     const isMP = gameMode !== 'ai';
-    // Player 1 cluster — bottom-left
     const pStarts = [[5,0],[5,1],[6,0],[6,1]];
     pStarts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER, cfg.pPow + randInt(2)); });
 
     if (isMP) {
-      // Player 2 — top-right (mirror)
       const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
       p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + randInt(2)); });
     } else if (cfg.isBoss) {
-      // Boss hex at center
       const br = 3, bc = 4;
       grid[br][bc] = makeCell(ENEMY, cfg.bossPow);
       grid[br][bc].boss = true;
@@ -307,15 +290,13 @@ const HexAsteal = (function () {
       if (need > 0) {
         for (const [r, c] of bNeigh) {
           if (need <= 0) break;
-          const n2 = getNeighbors(r, c);
-          for (const [nr, nc] of shuffle(n2)) {
+          for (const [nr, nc] of shuffle(getNeighbors(r, c))) {
             if (need <= 0) break;
             if (grid[nr][nc].owner === NEUTRAL) { grid[nr][nc] = makeCell(ENEMY, cfg.ePow + randInt(2)); need--; }
           }
         }
       }
     } else {
-      // Normal AI: enemy cluster top-right
       const ePrimary = [[0,7],[0,8],[1,7],[1,8]];
       const used = new Set(ePrimary.map(([r,c]) => `${r},${c}`));
       ePrimary.forEach(([r,c]) => { grid[r][c] = makeCell(ENEMY, cfg.ePow + randInt(2)); });
@@ -333,20 +314,20 @@ const HexAsteal = (function () {
       }
     }
 
-    // Mountains
     let placed = 0, att = 0;
+    const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
     while (placed < cfg.blocked && att < 300) {
       att++;
       const r = randInt(ROWS), c = randInt(COLS);
       if (grid[r][c].owner !== NEUTRAL) continue;
-      const nearP = pStarts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
-      const nearB = cfg.isBoss && Math.abs(r-3)+Math.abs(c-4) <= 2;
-      if (nearP || nearB) continue;
+      const nearP  = pStarts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      const nearP2 = isMP && p2Starts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      const nearB  = cfg.isBoss && Math.abs(r-3)+Math.abs(c-4) <= 2;
+      if (nearP || nearP2 || nearB) continue;
       grid[r][c] = makeCell(BLOCKED, 0);
       placed++;
     }
 
-    // Power-ups
     const neutrals = [];
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++)
@@ -507,7 +488,6 @@ const HexAsteal = (function () {
     updateHUD();
     btnSkip.disabled = (phase !== 'select' && phase !== 'target');
 
-    // Board bg for local P2 turn
     if (gameMode === 'local') {
       boardEl.classList.toggle('p2-turn', localTurn === PLAYER2);
     }
@@ -520,9 +500,7 @@ const HexAsteal = (function () {
     let pH = 0, pP = 0, eH = 0, eP = 0;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const cell = grid[r][c];
-      // "player" side = PLAYER always
       if (cell.owner === PLAYER) { pH++; pP += cell.power; }
-      // "enemy" side = ENEMY or PLAYER2
       if (cell.owner === ENEMY || cell.owner === PLAYER2) { eH++; eP += cell.power; }
     }
     turnEl.textContent = turn;
@@ -531,7 +509,6 @@ const HexAsteal = (function () {
     pHexesEl.textContent = pH; pPowerEl.textContent = pP;
     eHexesEl.textContent = eH; ePowerEl.textContent = eP;
 
-    // HUD labels
     if (gameMode === 'local') {
       pLabel.textContent = 'P1';
       foeLabel.textContent = 'P2';
@@ -632,7 +609,6 @@ const HexAsteal = (function () {
   // =========== MODE SELECT ===========
   function showModeSelect() {
     SFX.click();
-    // Highlight active mode
     document.getElementById('mode-btn-ai').classList.toggle('active', gameMode === 'ai');
     document.getElementById('mode-btn-local').classList.toggle('active', gameMode === 'local');
     document.getElementById('mode-btn-online').classList.toggle('active', gameMode === 'online');
@@ -643,14 +619,14 @@ const HexAsteal = (function () {
   function selectMode(mode) {
     SFX.click();
     modeOverlay.classList.add('hidden');
-    if (mode === gameMode) return; // no change, just close
+    if (mode === gameMode) return;
 
     gameMode = mode;
     if (mode === 'ai') {
-      cleanupOnline();
+      cancelOnline();  // was wrongly named cleanupOnline in the original
       startStage(progress.stage);
     } else if (mode === 'local') {
-      cleanupOnline();
+      cancelOnline();
       startLocalGame();
     } else if (mode === 'online') {
       showOnlineLobby();
@@ -666,13 +642,10 @@ const HexAsteal = (function () {
     generateAndPlay();
   }
 
-  // Show the pass-and-play banner
   function showLocalTurnBanner() {
-    const banner = localTurnBanner;
-    const icon = document.getElementById('local-banner-icon');
+    const icon  = document.getElementById('local-banner-icon');
     const title = document.getElementById('local-banner-title');
-    const sub = document.getElementById('local-banner-sub');
-
+    const sub   = document.getElementById('local-banner-sub');
     if (localTurn === PLAYER) {
       icon.textContent = '🟢';
       title.textContent = "Player 1's Turn";
@@ -682,7 +655,7 @@ const HexAsteal = (function () {
       title.textContent = "Player 2's Turn";
       sub.textContent = 'Pass the device to Player 2';
     }
-    banner.classList.remove('hidden');
+    localTurnBanner.classList.remove('hidden');
   }
   function dismissLocalBanner() {
     SFX.click();
@@ -693,298 +666,240 @@ const HexAsteal = (function () {
     render();
   }
 
-  // =========== ONLINE MULTIPLAYER (Gun.js relay) ===========
-  // Gun.js is a decentralized real-time graph DB that works purely in-browser,
-  // no backend required. Falls back to public relay peers automatically.
-
-  function loadGun(cb) {
-    if (window.Gun) { cb(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/gun/gun.js';
-    s.onload = cb;
-    s.onerror = () => setOnlineStatus('Network error loading relay. Check connection.', 'error');
-    document.head.appendChild(s);
+  // =========== ONLINE MULTIPLAYER (Firebase) ===========
+  function showOnlineLobby() {
+    onlineOverlay.classList.remove('hidden');
+    showCreateJoin();
   }
 
-  function initGun() {
-    if (gun) return;
-    // Use multiple public Gun relay peers for reliability
-    gun = Gun({
-      peers: [
-        'https://gun-manhattan.herokuapp.com/gun',
-        'https://peer.wallie.io/gun',
-        'https://relay.peer.ooo/gun'
-      ],
-      localStorage: false
+  function showCreateJoin() {
+    document.getElementById('online-create-join').classList.remove('hidden');
+    document.getElementById('online-join-form').classList.add('hidden');
+    document.getElementById('online-waiting').classList.add('hidden');
+    document.getElementById('online-connecting').classList.add('hidden');
+    document.getElementById('online-back-btn').style.display = '';
+  }
+
+  function showJoinRoom() {
+    SFX.click();
+    document.getElementById('online-create-join').classList.add('hidden');
+    document.getElementById('online-join-form').classList.remove('hidden');
+    document.getElementById('online-back-btn').style.display = '';
+    setupCodeInputs();
+    setTimeout(() => document.getElementById('cd0').focus(), 50);
+  }
+
+  function setupCodeInputs() {
+    for (let i = 0; i < 4; i++) {
+      const el = document.getElementById(`cd${i}`);
+      el.value = '';
+      el.oninput = () => {
+        el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
+        if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
+      };
+      el.onkeydown = (e) => {
+        if (e.key === 'Backspace' && !el.value && i > 0) {
+          document.getElementById(`cd${i-1}`).focus();
+        }
+      };
+    }
+  }
+
+  function onlineCreate() {
+    SFX.click();
+    document.getElementById('online-create-join').classList.add('hidden');
+    document.getElementById('online-waiting').classList.remove('hidden');
+    document.getElementById('online-back-btn').style.display = 'none';
+
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    roomCode = code;
+    onlineSide = PLAYER;
+
+    document.getElementById('room-code-big').textContent = code;
+    document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+
+    // Generate seed immediately so both players get an identical map
+    const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+
+    dbRef = ref(database, `rooms/${code}`);
+    set(dbRef, { status: 'waiting', seed, createdAt: Date.now() })
+      .catch(err => {
+        console.error('Create room error:', err);
+        setOnlineStatus('Failed to create room. Check connection.', 'error');
+      });
+
+    const statusRef = ref(database, `rooms/${code}/status`);
+    statusListener = onValue(statusRef, (snapshot) => {
+      if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
+        update(dbRef, { status: 'started' }).catch(console.error);
+        document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+        setTimeout(() => {
+          cleanupListeners();
+          onlineOverlay.classList.add('hidden');
+          startOnlineGame(true, seed);
+          startOnlineMoveListener();
+        }, 700);
+      }
     });
   }
 
-function showOnlineLobby() {
-  onlineOverlay.classList.remove('hidden');
-  showCreateJoin();
-}
+  function onlineJoin() {
+    SFX.click();
+    const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
 
-function showCreateJoin() {
-  document.getElementById('online-create-join').classList.remove('hidden');
-  document.getElementById('online-join-form').classList.add('hidden');
-  document.getElementById('online-waiting').classList.add('hidden');
-  document.getElementById('online-connecting').classList.add('hidden');
-  document.getElementById('online-back-btn').style.display = '';
-}
+    if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+      setOnlineStatus('Enter a valid 4-digit code.', 'error');
+      return;
+    }
 
-function showJoinRoom() {
-  SFX.click();
-  document.getElementById('online-create-join').classList.add('hidden');
-  document.getElementById('online-join-form').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = '';
-  setupCodeInputs();
-  setTimeout(() => document.getElementById('cd0').focus(), 50);
-}
+    document.getElementById('online-join-form').classList.add('hidden');
+    const connectingEl = document.getElementById('online-connecting');
+    connectingEl.classList.remove('hidden');
+    connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+    document.getElementById('online-back-btn').style.display = 'none';
 
-function setupCodeInputs() {
-  for (let i = 0; i < 4; i++) {
-    const el = document.getElementById(`cd${i}`);
-    el.value = '';
-    el.oninput = () => {
-      el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
-      if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
-    };
-    el.onkeydown = (e) => {
-      if (e.key === 'Backspace' && !el.value && i > 0) {
-        document.getElementById(`cd${i-1}`).focus();
+    roomCode = code;
+    onlineSide = PLAYER2;
+    dbRef = ref(database, `rooms/${code}`);
+
+    const joinTimeout = setTimeout(() => {
+      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found or expired.</p>`;
+      document.getElementById('online-back-btn').style.display = '';
+    }, 12000);
+
+    roomListener = onValue(dbRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        clearTimeout(joinTimeout);
+        connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found.</p>`;
+        document.getElementById('online-back-btn').style.display = '';
+        return;
       }
-    };
-  }
-}
-function onlineCreate() {
-  SFX.click();
-  document.getElementById('online-create-join').classList.add('hidden');
-  document.getElementById('online-waiting').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = 'none';
-
-  const code = String(Math.floor(1000 + Math.random() * 9000));
-  roomCode = code;
-  onlineSide = PLAYER;
-
-  document.getElementById('room-code-big').textContent = code;
-  document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
-
-  // FIXED: Generate seed immediately so both players get identical map
-  const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
-
-  dbRef = ref(database, `rooms/${code}`);
-
-  set(dbRef, {
-    status: 'waiting',
-    seed: seed,                    // Seed is set at creation
-    createdAt: Date.now()
-  }).catch(err => {
-    console.error('Create room error:', err);
-    setOnlineStatus('Failed to create room. Check connection.', 'error');
-  });
-
-  // Listen for opponent joining
-  const statusRef = ref(database, `rooms/${code}/status`);
-  statusListener = onValue(statusRef, (snapshot) => {
-    if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
-      update(dbRef, { status: 'started' }).catch(console.error);
-
-      document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
-
-      setTimeout(() => {
-        cleanupListeners();
-        document.getElementById('online-overlay').classList.add('hidden');
-        startOnlineGame(true, seed);
-        startOnlineMoveListener();
-      }, 700);
-    }
-  });
-}
-
-// =========== JOIN ROOM (Guest) ===========
-function onlineJoin() {
-  SFX.click();
-  const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
-
-  if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-    setOnlineStatus('Enter a valid 4-digit code.', 'error');
-    return;
-  }
-
-  document.getElementById('online-join-form').classList.add('hidden');
-  const connectingEl = document.getElementById('online-connecting');
-  connectingEl.classList.remove('hidden');
-  connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
-
-  roomCode = code;
-  onlineSide = PLAYER2;
-  dbRef = ref(database, `rooms/${code}`);
-
-  let joinTimeout = setTimeout(() => {
-    connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found or expired.</p>`;
-    document.getElementById('online-back-btn').style.display = '';
-  }, 12000);
-
-  roomListener = onValue(dbRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data) {
       clearTimeout(joinTimeout);
-      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found.</p>`;
-      return;
+
+      if (data.status === 'waiting') {
+        update(dbRef, { status: 'joined' }).catch(console.error);
+        connectingEl.innerHTML = `<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+      }
+
+      if (data.status === 'started') {
+        cleanupListeners();
+        onlineOverlay.classList.add('hidden');
+        startOnlineGame(false, data.seed);
+        startOnlineMoveListener();
+      }
+    });
+  }
+
+  function startOnlineMoveListener() {
+    if (!roomCode) return;
+    // We listen for the OPPONENT's move key
+    const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+    const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
+
+    moveListener = onValue(moveRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
+      if (data.sender === onlineSide) return;
+      lastSeenMsgId = data.msgId;
+      if (data.turn !== turn) {
+        console.warn('Turn mismatch:', data.turn, 'vs local', turn);
+        return;
+      }
+      handleOnlineMessage(data);
+    });
+  }
+
+  function cancelOnline() {
+    SFX.click();
+    cleanupListeners();
+
+    if (dbRef && roomCode && onlineSide === PLAYER) {
+      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
     }
-    clearTimeout(joinTimeout);
 
-    if (data.status === 'waiting') {
-      update(dbRef, { status: 'joined' }).catch(console.error);
-      connectingEl.innerHTML = `<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+    dbRef = null;
+    roomCode = null;
+    lastSeenMsgId = null;
+    onlineOverlay.classList.add('hidden');
+    if (gameMode === 'online') gameMode = 'ai';
+  }
+
+  function cleanupListeners() {
+    if (statusListener && roomCode) {
+      try { off(ref(database, `rooms/${roomCode}/status`)); } catch (e) {}
+      statusListener = null;
     }
-
-    if (data.status === 'started') {
-      cleanupListeners();
-      document.getElementById('online-overlay').classList.add('hidden');
-      startOnlineGame(false, data.seed);   // Same seed as host
-      startOnlineMoveListener();
+    if (roomListener && dbRef) {
+      try { off(dbRef); } catch (e) {}
+      roomListener = null;
     }
-  });
-}
-function startOnlineMoveListener() {
-  if (!dbRef || !roomCode) return;
+    if (moveListener && roomCode) {
+      try {
+        const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+        off(ref(database, `rooms/${roomCode}/${key}`));
+      } catch (e) {}
+      moveListener = null;
+    }
+  }
 
-  const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-  const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
+  function sendOnline(msg) {
+    if (!roomCode) return;
+    const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+    const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    const payload = {
+      msgId,
+      sender: onlineSide,
+      type: msg.type,
+      move: msg.move || null,
+      turn,
+      ts: Date.now()
+    };
+    update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
+      .catch(err => console.error('Send move failed:', err));
+  }
 
-  moveListener = onValue(moveRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
+  function handleOnlineMessage(data) {
+    if (!data || !data.type) return;
     if (data.sender === onlineSide) return;
-
-    lastSeenMsgId = data.msgId;
-
-    if (data.turn !== turn) {
-      console.warn('Turn mismatch:', data.turn, 'vs', turn);
-      return;
+    if (data.type === 'move') {
+      if (phase !== 'wait-online') { console.warn('Wrong phase for move:', phase); return; }
+      applyRemoteMove(data.move);
+    } else if (data.type === 'skip') {
+      if (phase !== 'wait-online') { console.warn('Wrong phase for skip:', phase); return; }
+      applyRemoteSkip();
     }
-
-    handleOnlineMessage(data);
-  });
-}
-
-// =========== FIX: CANCEL ONLINE ===========
-function cancelOnline() {
-  SFX.click();
-  
-  // ✅ Clean up all listeners properly
-  if (statusListener && roomCode) {
-    try {
-      off(ref(database, `rooms/${roomCode}/status`));
-    } catch (e) {}
-    statusListener = null;
   }
-  
-  if (roomListener && roomCode) {
-    try {
-      off(ref(database, `rooms/${roomCode}`));
-    } catch (e) {}
-    roomListener = null;
-  }
-  
-  if (moveListener && roomCode) {
-    try {
-      const myKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-      off(ref(database, `rooms/${roomCode}/${myKey}`));
-    } catch (e) {}
-    moveListener = null;
-  }
-  
-  // ✅ Delete room if we're the creator
-  if (dbRef && roomCode && onlineSide === PLAYER) {
-    set(ref(database, `rooms/${roomCode}`), null).catch(err => 
-      console.error('Delete error:', err)
-    );
-  }
-  
-  dbRef = null;
-  roomCode = null;
-  lastSeenMsgId = null;
-  
-  document.getElementById('online-overlay').classList.add('hidden');
-  if (gameMode === 'online') gameMode = 'ai';
-}
-function sendOnline(msg) {
-  if (!dbRef || !roomCode) return;
 
-  const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
-  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-
-  const payload = {
-    msgId,
-    sender: onlineSide,
-    type: msg.type,
-    move: msg.move || null,
-    turn: turn,
-    ts: Date.now()
-  };
-
-  update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
-    .catch(err => console.error('Send move failed:', err));
-}
-
-
-function handleOnlineMessage(data) {
-  if (!data || !data.type) return;
-  if (data.sender === onlineSide) return;
-
-  if (data.type === 'move') {
-    if (phase !== 'wait-online') {
-      console.warn('Wrong phase for move:', phase);
-      return;
-    }
-    applyRemoteMove(data.move);
-  }
-  else if (data.type === 'skip') {
-    if (phase !== 'wait-online') {
-      console.warn('Wrong phase for skip:', phase);
-      return;
-    }
-    applyRemoteSkip();
-  }
-}
-
-  // seeded random for sync
+  // Seeded random for map sync
   let _rngSeed = 0;
   function seededRand(n) {
     _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
     return Math.abs(_rngSeed) % n;
   }
 
-function startOnlineGame(isHost, seed) {
-  gameMode = 'online';
-  cfg = mpConfig();
-  hideAllOverlays();
-  turn = 1; 
-  phase = 'select';
-  selectedHex = null; 
-  validTargets = []; 
-  transferTargets = []; 
-  animating = false;
+  function startOnlineGame(isHost, seed) {
+    gameMode = 'online';
+    cfg = mpConfig();
+    hideAllOverlays();
+    turn = 1;
+    phase = 'select';
+    selectedHex = null; validTargets = []; transferTargets = []; animating = false;
 
-  const useSeed = seed || (Date.now() & 0xffff);
-  generateMapSeeded(useSeed);
-  createBoard();
+    generateMapSeeded(seed || (Date.now() & 0xffff));
+    createBoard();
+    SFX.stageStart();
+    render();
 
-  SFX.stageStart();
-  render();
-
-  if (onlineSide === PLAYER) {
-    setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
-  } else {
-    phase = 'wait-online';
-    setStatus('🌐 Waiting for P1 to move…');
+    if (onlineSide === PLAYER) {
+      setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
+    } else {
+      phase = 'wait-online';
+      setStatus('🌐 Waiting for P1 to move…');
+    }
+    render();
   }
-  render();
-}
 
-  // Map generation using seeded random
   function generateMapSeeded(seed) {
     _rngSeed = seed;
     grid = [];
@@ -992,9 +907,9 @@ function startOnlineGame(isHost, seed) {
       grid[r] = [];
       for (let c = 0; c < COLS; c++) grid[r][c] = makeCell(NEUTRAL, 1 + seededRand(4));
     }
-    const pStarts = [[5,0],[5,1],[6,0],[6,1]];
-    pStarts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER, cfg.pPow + seededRand(2)); });
+    const pStarts  = [[5,0],[5,1],[6,0],[6,1]];
     const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
+    pStarts.forEach(([r,c])  => { grid[r][c] = makeCell(PLAYER,  cfg.pPow + seededRand(2)); });
     p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + seededRand(2)); });
 
     let placed = 0, att = 0;
@@ -1002,7 +917,7 @@ function startOnlineGame(isHost, seed) {
       att++;
       const r = seededRand(ROWS), c = seededRand(COLS);
       if (grid[r][c].owner !== NEUTRAL) continue;
-      const nearP = pStarts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
+      const nearP  = pStarts.some(([sr,sc])  => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
       const nearP2 = p2Starts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
       if (nearP || nearP2) continue;
       grid[r][c] = makeCell(BLOCKED, 0);
@@ -1040,12 +955,12 @@ function startOnlineGame(isHost, seed) {
       const src = grid[move.sr][move.sc], dst = grid[move.dr][move.dc];
       if (!src || !dst) { animating = false; return; }
       let aPow = src.power;
-      if (src.blazeBuffed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
+      if (src.blazeBuffed) { aPow = Math.min(aPow*2, 18); src.blazeBuffed = false; }
       let dPow = dst.power;
       if (dst.shielded) dPow += 3;
       const capPU = dst.powerup;
       if (aPow > dPow) {
-        dst.owner = src.owner; dst.power = Math.min(aPow-dPow, MAX_POWER);
+        dst.owner = src.owner; dst.power = Math.min(aPow - dPow, MAX_POWER);
         src.power = 1; dst.powerup = null; dst.shielded = false;
         dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
         flashHex(move.dr, move.dc, onlineSide === PLAYER ? 'flash-ai-capture' : 'flash-capture', 550);
@@ -1053,7 +968,7 @@ function startOnlineGame(isHost, seed) {
         if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
         setStatus(`⚔️ Opponent captured! (${aPow} vs ${dPow})`);
       } else if (aPow === dPow) {
-        src.power = Math.max(1, src.power-1);
+        src.power = Math.max(1, src.power - 1);
         setStatus('⚔️ Opponent tied!');
       } else {
         src.power = 1; if (dst.power > 1) dst.power -= 1;
@@ -1069,60 +984,31 @@ function startOnlineGame(isHost, seed) {
     afterOpponentTurn();
   }
 
-function afterOpponentTurn() {
-  turn++;
-  growPhaseOwner(onlineSide);
-  phase = 'select';
-  const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
-  setStatus(`🌐 Your turn (${label}) — select a hex`);
-  render();
-}
-
-function sendMove(moveData) {
-  sendOnline({ type: 'move', move: moveData });
-}
-
-  function copyRoomCode() {
-    if (onlineRoomCode) {
-      navigator.clipboard.writeText(onlineRoomCode).catch(() => {});
-      SFX.click();
-    }
+  // After the OPPONENT finishes their turn — now it's OUR turn
+  function afterOpponentTurn() {
+    turn++;
+    // Grow the opponent's hexes (they moved, so they get growth on their own next cycle)
+    // Actually: we grow OUR side since it's now our turn starting
+    growPhaseOwner(onlineSide);
+    phase = 'select';
+    const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
+    setStatus(`🌐 Your turn (${label}) — select a hex`);
+    render();
   }
-
-function cancelOnline() {
-  SFX.click();
-  cleanupListeners();
-
-  if (dbRef && roomCode && onlineSide === PLAYER) {
-    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
-  }
-
-  dbRef = null;
-  roomCode = null;
-  lastSeenMsgId = null;
-  document.getElementById('online-overlay').classList.add('hidden');
-  if (gameMode === 'online') gameMode = 'ai';
-}
-
-function cleanupListeners() {
-  if (statusListener) {
-    off(ref(database, `rooms/${roomCode}/status`));
-    statusListener = null;
-  }
-  if (roomListener) {
-    off(dbRef);
-    roomListener = null;
-  }
-  if (moveListener) {
-    const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-    off(ref(database, `rooms/${roomCode}/${key}`));
-    moveListener = null;
-  }
-}}
 
   function setOnlineStatus(msg, type) {
     const waiting = document.getElementById('waiting-text');
-    if (waiting) { waiting.textContent = msg; waiting.style.color = type === 'error' ? '#f87171' : ''; }
+    if (waiting) {
+      waiting.textContent = msg;
+      waiting.style.color = type === 'error' ? '#f87171' : '';
+    }
+  }
+
+  function copyRoomCode() {
+    if (roomCode) {
+      navigator.clipboard.writeText(roomCode).catch(() => {});
+      SFX.click();
+    }
   }
 
   // =========== STAGE MANAGEMENT ===========
@@ -1181,7 +1067,7 @@ function cleanupListeners() {
   function restartStage() {
     SFX.click(); hideAllOverlays();
     if (gameMode === 'local') { startLocalGame(); return; }
-    if (gameMode === 'online') { /* restart not supported online, just close */ return; }
+    if (gameMode === 'online') return;
     startStage(currentStage);
   }
 
@@ -1194,10 +1080,8 @@ function cleanupListeners() {
   function handleClick(r, c) {
     if (animating || phase === 'ai' || phase === 'gameover' || phase === 'wait-online') return;
 
-    // Online: ignore if not our turn
     if (gameMode === 'online') {
-      const myOwner = onlineSide;
-      if (grid[r][c].owner !== NEUTRAL && grid[r][c].owner !== myOwner && phase === 'select') return;
+      if (grid[r][c].owner !== NEUTRAL && grid[r][c].owner !== onlineSide && phase === 'select') return;
     }
 
     const ao = activeOwner();
@@ -1260,8 +1144,7 @@ function cleanupListeners() {
     selectedHex = null; validTargets = []; transferTargets = [];
     render();
 
-    // Send online
-    if (gameMode === 'online') sendMove({ type:'transfer', sr, sc, dr, dc });
+    if (gameMode === 'online') sendOnline({ type: 'move', move: { type:'transfer', sr, sc, dr, dc } });
 
     setTimeout(() => {
       animating = false;
@@ -1310,8 +1193,7 @@ function cleanupListeners() {
     selectedHex = null; validTargets = []; transferTargets = [];
     render();
 
-    // Send online
-    if (gameMode === 'online') sendMove({ type:'attack', sr, sc, dr, dc });
+    if (gameMode === 'online') sendOnline({ type: 'move', move: { type:'attack', sr, sc, dr, dc } });
 
     setTimeout(() => {
       animating = false;
@@ -1323,25 +1205,26 @@ function cleanupListeners() {
     }, wasBoss ? 1000 : 700);
   }
 
-  // Called after the active player takes their action
-function afterPlayerTurn() {
-  if (gameMode === 'ai') {
-    beginAITurn();
-  } else if (gameMode === 'local') {
-    localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
-    growPhaseOwner(localTurn);
-    turn++;
-    phase = 'select';
-    render();
-    showLocalTurnBanner();
-  } else if (gameMode === 'online') {
-    phase = 'wait-online';
-    growPhaseOwner(onlineSide);
-    turn++;
-    setStatus('🌐 Waiting for opponent…');
-    render();
+  function afterPlayerTurn() {
+    if (gameMode === 'ai') {
+      beginAITurn();
+    } else if (gameMode === 'local') {
+      localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
+      growPhaseOwner(localTurn);
+      turn++;
+      phase = 'select';
+      render();
+      showLocalTurnBanner();
+    } else if (gameMode === 'online') {
+      // Grow the opponent's hexes (their turn starts after this)
+      growPhaseOwner(opponentOwner());
+      turn++;
+      phase = 'wait-online';
+      setStatus('🌐 Waiting for opponent…');
+      render();
+    }
   }
-}
+
   // =========== POWER-UP EFFECTS ===========
   function applyPowerup(type, r, c, owner) {
     const cell = grid[r][c];
@@ -1416,7 +1299,6 @@ function afterPlayerTurn() {
     }
   }
 
-  // Legacy: grow only PLAYER (used in AI mode)
   function growPhase(owner) { growPhaseOwner(owner); }
 
   // =========== AI ===========
@@ -1528,11 +1410,11 @@ function afterPlayerTurn() {
   }
 
   function checkGameOverAI() {
-    let hasP = false, hasE = false, pS = 0, eS = 0, pH = 0, eH = 0, hasBoss = false;
+    let hasP = false, hasE = false, pS = 0, eS = 0, hasBoss = false;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const o = grid[r][c].owner;
-      if (o === PLAYER) { hasP = true; pH++; pS += grid[r][c].power; }
-      if (o === ENEMY)  { hasE = true; eH++; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
+      if (o === PLAYER) { hasP = true; pS += grid[r][c].power; }
+      if (o === ENEMY)  { hasE = true; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
     }
     if (cfg.isBoss && !hasBoss && hasP) { showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'); return true; }
     if (!hasE) { showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'); return true; }
@@ -1554,23 +1436,23 @@ function afterPlayerTurn() {
       if (cell.owner === PLAYER2) { p2H++; p2S += cell.power; }
     }
 
-    // Names
-    const p1Name = gameMode === 'online' && onlineSide === PLAYER2 ? 'Opponent' : 'Player 1';
-    const p2Name = gameMode === 'online' && onlineSide === PLAYER  ? 'Opponent' : 'Player 2';
-    const myName = gameMode === 'online'
-      ? 'You'
-      : (localTurn === PLAYER ? 'Player 1' : 'Player 2');
+    const p1Name = (gameMode === 'online' && onlineSide === PLAYER2) ? 'Opponent' : 'Player 1';
+    const p2Name = (gameMode === 'online' && onlineSide === PLAYER)  ? 'Opponent' : 'Player 2';
 
     if (p2H === 0) {
-      showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, 'win'); return true;
+      showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, p1Name === 'Opponent' ? 'lose' : 'win'); return true;
     }
     if (p1H === 0) {
-      showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, 'lose'); return true;
+      showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, p2Name === 'Opponent' ? 'lose' : 'win'); return true;
     }
     if (turn >= cfg.maxTurns) {
-      if (p1S > p2S) showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name.includes('You') || gameMode==='local' ? 'win' : 'lose');
-      else if (p2S > p1S) showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name.includes('You') || (gameMode==='local') ? 'win' : 'lose');
-      else showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
+      if (p1S > p2S) {
+        showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
+      } else if (p2S > p1S) {
+        showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
+      } else {
+        showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
+      }
       return true;
     }
     return false;
@@ -1606,10 +1488,9 @@ function afterPlayerTurn() {
     setStatus(title); render();
   }
 
-  // =========== HELPERS ===========
   function setStatus(msg) { statusEl.textContent = msg; }
 
-  // =========== PUBLIC API ===========
+  // =========== SKIP ATTACK ===========
   function skipAttack() {
     if (phase !== 'select' && phase !== 'target') return;
     SFX.click();
@@ -1620,15 +1501,18 @@ function afterPlayerTurn() {
     setStatus('Skipped…');
     render();
     setTimeout(() => {
-      if (gameMode === 'ai') beginAITurn();
-      else if (gameMode === 'local') {
+      if (gameMode === 'ai') {
+        beginAITurn();
+      } else if (gameMode === 'local') {
         localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
         growPhaseOwner(localTurn); turn++;
         phase = 'select'; render();
         showLocalTurnBanner();
       } else if (gameMode === 'online') {
+        // Grow opponent's hexes (their turn is starting)
+        growPhaseOwner(opponentOwner());
+        turn++;
         phase = 'wait-online';
-        growPhaseOwner(opponentOwner()); turn++;
         setStatus('🌐 Waiting for opponent…'); render();
       }
     }, 300);
@@ -1640,229 +1524,47 @@ function afterPlayerTurn() {
     if (SFX.on) SFX.click();
   }
 
-// =========== CREATE ROOM - FIREBASE ===========
-function onlineCreate() {
-  SFX.click();
-  document.getElementById('online-create-join').classList.add('hidden');
-  document.getElementById('online-waiting').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = 'none';
-
-  const code = String(Math.floor(1000 + Math.random() * 9000));
-  roomCode = code;
-  document.getElementById('room-code-big').textContent = code;
-  document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
-
-  onlineSide = PLAYER;
-  dbRef = ref(database, `rooms/${code}`);
-  
-  const roomData = {
-    status: 'waiting',
-    seed: 0,
-    p1: onlineSide,
-    ts: Date.now()
-  };
-  
-  set(dbRef, roomData).catch(err => {
-    console.error('Firebase room creation error:', err);
-    setOnlineStatus('Connection failed. Check your internet.', 'error');
-  });
-  
-  const statusRef = ref(database, `rooms/${code}/status`);
-  onValue(statusRef, (snapshot) => {
-    const status = snapshot.val();
-    if (status === 'joined' && onlineSide === PLAYER) {
-      const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
-      update(ref(database, `rooms/${code}`), { 
-        status: 'started', 
-        seed 
-      });
-      document.getElementById('waiting-text').textContent = 'Opponent connected! Starting…';
-      setTimeout(() => {
-        document.getElementById('online-overlay').classList.add('hidden');
-        startOnlineGame(true, seed);
-        startOnlineMoveListener();
-      }, 600);
-    }
-  });
-}
-
-// =========== JOIN ROOM - FIREBASE ===========
-function onlineJoin() {
-  SFX.click();
-  const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
-  
-  if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-    setOnlineStatus('Enter all 4 digits.', 'error');
-    return;
-  }
-
-  document.getElementById('online-join-form').classList.add('hidden');
-  document.getElementById('online-connecting').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = 'none';
-  document.getElementById('online-connecting').innerHTML =
-    '<p class="mode-sub">Connecting to room ' + code + '…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
-
-  roomCode = code;
-  onlineSide = PLAYER2;
-  dbRef = ref(database, `rooms/${code}`);
-
-  let joinTimeout = setTimeout(() => {
-    document.getElementById('online-connecting').innerHTML =
-      '<p class="mode-sub" style="color:#f87171">Room not found. Check the code.</p>';
-    document.getElementById('online-back-btn').style.display = '';
-  }, 10000);
-
-  const roomRef = ref(database, `rooms/${code}`);
-  onValue(roomRef, (snapshot) => {
-    const data = snapshot.val();
-    
-    if (!data) {
-      clearTimeout(joinTimeout);
-      document.getElementById('online-connecting').innerHTML =
-        '<p class="mode-sub" style="color:#f87171">Room not found.</p>';
-      document.getElementById('online-back-btn').style.display = '';
-      return;
-    }
-
-    clearTimeout(joinTimeout);
-    
-    update(ref(database, `rooms/${code}`), { status: 'joined' }).catch(err => {
-      console.error('Error joining room:', err);
-    });
-    
-    document.getElementById('online-connecting').innerHTML =
-      '<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>';
-
-    if (data.status === 'started') {
-      off(roomRef);
-      document.getElementById('online-overlay').classList.add('hidden');
-      startOnlineGame(false, data.seed);
-      startOnlineMoveListener();
-    }
-  });
-}
-
-// =========== COPY ROOM CODE ===========
-function copyRoomCode() {
-  if (roomCode) {
-    navigator.clipboard.writeText(roomCode).then(() => {
-      SFX.click();
-      alert('Room code copied: ' + roomCode);
-    }).catch(() => {
-      alert('Room code: ' + roomCode);
-    });
-  }
-}
-
-// =========== SHOW ONLINE LOBBY ===========
-function showOnlineLobby() {
-  document.getElementById('online-overlay').classList.remove('hidden');
-  showCreateJoin();
-}
-
-// =========== SHOW CREATE/JOIN ===========
-function showCreateJoin() {
-  document.getElementById('online-create-join').classList.remove('hidden');
-  document.getElementById('online-join-form').classList.add('hidden');
-  document.getElementById('online-waiting').classList.add('hidden');
-  document.getElementById('online-connecting').classList.add('hidden');
-  document.getElementById('online-back-btn').style.display = '';
-}
-
-// =========== SHOW JOIN FORM ===========
-function showJoinRoom() {
-  SFX.click();
-  document.getElementById('online-create-join').classList.add('hidden');
-  document.getElementById('online-join-form').classList.remove('hidden');
-  document.getElementById('online-back-btn').style.display = '';
-  setTimeout(() => document.getElementById('cd0').focus(), 100);
-  setupCodeInputs();
-}
-
-// =========== SETUP CODE INPUTS ===========
-function setupCodeInputs() {
-  for (let i = 0; i < 4; i++) {
-    const el = document.getElementById(`cd${i}`);
-    el.value = '';
-    el.oninput = () => {
-      el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
-      if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
-    };
-    el.onkeydown = (e) => {
-      if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
-    };
-  }
-}
-
-// =========== SET ONLINE STATUS ===========
-functionfunction setOnlineStatus(msg, type) {
-  const waiting = document.getElementById('waiting-text');
-  if (waiting) {
-    waiting.textContent = msg;
-    waiting.style.color = type === 'error' ? '#f87171' : '';
-  }
-}
-
-// =========== SELECT MODE ===========
-function selectMode(mode) {
-  SFX.click();
-  document.getElementById('mode-overlay').classList.add('hidden');
-  
-  if (mode === gameMode) return;
-
-  gameMode = mode;
-  if (mode === 'ai') {
-    cancelOnline();
-    startStage(progress.stage);
-  } else if (mode === 'local') {
-    cancelOnline();
-    startLocalGame();
-  } else if (mode === 'online') {
-    showOnlineLobby();
-  }
-}
-  
   // =========== INIT ===========
   function init() {
-    svgEl       = document.getElementById('grid');
-    statusEl    = document.getElementById('status');
-    turnEl      = document.getElementById('turn-num');
-    turnMaxEl   = document.getElementById('turn-max');
-    stageNumEl  = document.getElementById('stage-num');
-    bossBadge   = document.getElementById('boss-badge');
-    boardEl     = document.getElementById('board');
-    pHexesEl    = document.getElementById('p-hexes');
-    pPowerEl    = document.getElementById('p-power');
-    eHexesEl    = document.getElementById('e-hexes');
-    ePowerEl    = document.getElementById('e-power');
-    foeLabel    = document.getElementById('foe-label');
-    pLabel      = document.getElementById('p-label');
-    btnSkip     = document.getElementById('btn-skip');
-    btnSound    = document.getElementById('btn-sound');
-    enemyDot    = document.getElementById('enemy-dot');
+    svgEl         = document.getElementById('grid');
+    statusEl      = document.getElementById('status');
+    turnEl        = document.getElementById('turn-num');
+    turnMaxEl     = document.getElementById('turn-max');
+    stageNumEl    = document.getElementById('stage-num');
+    bossBadge     = document.getElementById('boss-badge');
+    boardEl       = document.getElementById('board');
+    pHexesEl      = document.getElementById('p-hexes');
+    pPowerEl      = document.getElementById('p-power');
+    eHexesEl      = document.getElementById('e-hexes');
+    ePowerEl      = document.getElementById('e-power');
+    foeLabel      = document.getElementById('foe-label');
+    pLabel        = document.getElementById('p-label');
+    btnSkip       = document.getElementById('btn-skip');
+    btnSound      = document.getElementById('btn-sound');
+    enemyDot      = document.getElementById('enemy-dot');
 
-    tutOverlay  = document.getElementById('tut-overlay');
-    tutIcon     = document.getElementById('tut-icon');
-    tutTitle    = document.getElementById('tut-title');
-    tutText     = document.getElementById('tut-text');
-    tutDots     = document.getElementById('tut-dots');
-    tutNextBtn  = document.getElementById('tut-next');
+    tutOverlay    = document.getElementById('tut-overlay');
+    tutIcon       = document.getElementById('tut-icon');
+    tutTitle      = document.getElementById('tut-title');
+    tutText       = document.getElementById('tut-text');
+    tutDots       = document.getElementById('tut-dots');
+    tutNextBtn    = document.getElementById('tut-next');
 
-    bossOverlay = document.getElementById('boss-overlay');
-    bossNameEl  = document.getElementById('boss-name');
-    bossSubEl   = document.getElementById('boss-sub');
+    bossOverlay   = document.getElementById('boss-overlay');
+    bossNameEl    = document.getElementById('boss-name');
+    bossSubEl     = document.getElementById('boss-sub');
 
     stagesOverlay = document.getElementById('stages-overlay');
     stageGridEl   = document.getElementById('stage-grid');
 
-    goOverlay   = document.getElementById('go-overlay');
-    resultTitle = document.getElementById('result-title');
-    resultDesc  = document.getElementById('result-desc');
-    btnNext     = document.getElementById('btn-next');
-    btnRetry    = document.getElementById('btn-retry');
+    goOverlay     = document.getElementById('go-overlay');
+    resultTitle   = document.getElementById('result-title');
+    resultDesc    = document.getElementById('result-desc');
+    btnNext       = document.getElementById('btn-next');
+    btnRetry      = document.getElementById('btn-retry');
 
-    modeOverlay   = document.getElementById('mode-overlay');
-    onlineOverlay = document.getElementById('online-overlay');
+    modeOverlay     = document.getElementById('mode-overlay');
+    onlineOverlay   = document.getElementById('online-overlay');
     localTurnBanner = document.getElementById('local-turn-banner');
 
     loadProgress();
@@ -1874,6 +1576,7 @@ function selectMode(mode) {
 
   document.addEventListener('DOMContentLoaded', init);
 
+  // =========== PUBLIC API ===========
   return {
     skipAttack, restartStage, nextStage, startBoss,
     showStages, closeStages, toggleSound,
@@ -1884,4 +1587,5 @@ function selectMode(mode) {
     dismissLocalBanner
   };
 })();
+
 window.HexAsteal = HexAsteal;
