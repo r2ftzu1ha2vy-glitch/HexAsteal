@@ -188,9 +188,135 @@ const HexAsteal = (function () {
   }
 
   // =========== PROGRESS ===========
-  const SAVE_KEY = 'hexasteal_v1';
-  let progress = { stage: 1, completed: [], tutDone: false, soundOn: true };
+const SAVEKEY = 'hexastealv1';
+let progress = {
+  stage: 1, completed: [], tutDone: false, soundOn: true,
+  hexoneX: 0,  // Currency
+  ownedSkins: {
+    colors: ['green'],     // Default
+    designs: ['none'],
+    cosmetics: ['none']
+  },
+  equippedSkins: {
+    color: 'green',
+    design: 'none',
+    cosmetic: 'none'
+  }
+};
 
+  // All skins
+const SKINS = {
+  colors: [
+    {id: 'green', name: 'Classic Green', price: 0, stroke: '#22c55e', fill: '#14532d'},
+    {id: 'blue', name: 'Cyber Blue', price: 50, stroke: '#3b82f6', fill: '#172554'},
+    {id: 'purple', name: 'Void Purple', price: 75, stroke: '#a855f7', fill: '#2e1065'},
+    {id: 'gold', name: 'Golden Glory', price: 150, stroke: '#fbbf24', fill: '#92400e'},
+    {id: 'rainbow', name: 'Rainbow', price: 300, stroke: '#ef4444', fill: '#991b1b'}
+  ],
+  designs: [
+    {id: 'none', name: 'Plain', price: 0},
+    {id: 'stripes', name: 'Stripes', price: 100},
+    {id: 'swirl', name: 'Swirl', price: 125},
+    {id: 'dots', name: 'Dots', price: 175}
+  ],
+  cosmetics: [
+    {id: 'none', name: 'None', price: 0},
+    {id: 'horns', name: 'Devil Horns', price: 200},
+    {id: 'halo', name: 'Angel Halo', price: 200},
+    {id: 'crown', name: 'Victory Crown', price: 350}
+  ]
+};
+
+// Award HexoneX after games
+function awardHexoneX(pHexes, eHexes, won) {
+  let earnings;
+  if (won) {
+    earnings = pHexes * 5;
+    progress.hexoneX += earnings;
+    setStatus(`+${earnings} HexoneX! 💰 (Win Bonus)`);
+  } else {
+    earnings = -(Math.floor(pHexes / 2) * 2);
+    progress.hexoneX = Math.max(0, progress.hexoneX + earnings);
+    setStatus(`${earnings} HexoneX 💸 (Loss Penalty)`);
+  }
+  saveProgress();
+  updateShopButton();
+}
+
+// Buy/Equip skins
+function buySkin(type, id, price) {
+  const skin = SKINS[type].find(s => s.id === id);
+  if (!skin) return;
+  
+  if (!progress.ownedSkins[type].includes(id)) {
+    if (progress.hexoneX < price) {
+      setStatus('❌ Not enough HexoneX!');
+      return;
+    }
+    progress.ownedSkins[type].push(id);
+    progress.hexoneX -= price;
+    saveProgress();
+    setStatus(`✅ Bought ${skin.name}!`);
+  } else {
+    progress.equippedSkins[type] = id;
+    saveProgress();
+    setStatus(`🎨 Equipped ${skin.name}!`);
+  }
+  showShop();
+  updateShopButton();
+  render();  // Refresh hex colors
+}
+
+// Update shop button in HUD
+function updateShopButton() {
+  const btn = document.getElementById('btn-shop');
+  if (btn) btn.textContent = `🛒 ${progress.hexoneX}`;
+}
+
+// Show shop overlay
+function showShop() {
+  const overlay = document.getElementById('shop-overlay');
+  document.getElementById('hexoneX-balance').textContent = progress.hexoneX;
+  
+  // Colors
+  document.getElementById('shop-colors').innerHTML = SKINS.colors.map(skin => `
+    <div class="skin-item ${progress.ownedSkins.colors.includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.color === skin.id ? 'equipped' : ''}">
+      <div class="skin-preview" style="background:${skin.fill};border:2px solid ${skin.stroke};border-radius:8px;width:50px;height:50px;"></div>
+      <div>
+        <div>${skin.name}</div>
+        <small>${skin.price} HexoneX</small>
+      </div>
+      <button onclick="buySkin('colors', '${skin.id}', ${skin.price})">
+        ${progress.ownedSkins.colors.includes(skin.id) ? 'Equip' : 'Buy'}
+      </button>
+    </div>
+  `).join('');
+  
+  // Designs (similar structure)
+  document.getElementById('shop-designs').innerHTML = SKINS.designs.map(skin => `
+    <div class="skin-item ${progress.ownedSkins.designs.includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.design === skin.id ? 'equipped' : ''}">
+      <div class="skin-preview design-preview">${skin.id !== 'none' ? skin.id : ''}</div>
+      <div>${skin.name}<br><small>${skin.price} HexoneX</small></div>
+      <button onclick="buySkin('designs', '${skin.id}', ${skin.price})">
+        ${progress.ownedSkins.designs.includes(skin.id) ? 'Equip' : 'Buy'}
+      </button>
+    </div>
+  `).join('');
+  
+  // Cosmetics
+  document.getElementById('shop-cosmetics').innerHTML = SKINS.cosmetics.map(skin => `
+    <div class="skin-item ${progress.ownedSkins.cosmetics.includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
+      <div class="skin-preview cosmetic-preview">${skin.id}</div>
+      <div>${skin.name}<br><small>${skin.price} HexoneX</small></div>
+      <button onclick="buySkin('cosmetics', '${skin.id}', ${skin.price})">
+        ${progress.ownedSkins.cosmetics.includes(skin.id) ? 'Equip' : 'Buy'}
+      </button>
+    </div>
+  `).join('');
+  
+  overlay.classList.remove('hidden');
+}
+  
   function loadProgress() {
     try {
       const d = JSON.parse(localStorage.getItem(SAVE_KEY));
@@ -468,6 +594,14 @@ const HexAsteal = (function () {
         }
 
         el.polygon.setAttribute('class', cls);
+        // Apply player skins
+if (cls.includes('hex-player') || cls.includes('hex-player2')) {
+  const colorSkin = SKINS.colors.find(s => s.id === progress.equippedSkins.color);
+  if (colorSkin) {
+    el.polygon.style.fill = colorSkin.fill;
+    el.polygon.style.stroke = colorSkin.stroke;
+  }
+}
         el.text.textContent = cell.power;
 
         if (cell.powerup && cell.owner === NEUTRAL) {
@@ -1651,54 +1785,78 @@ function doOnlineRematch(seed) {
     return checkGameOverAI();
   }
 
-  function checkGameOverAI() {
-    let hasP = false, hasE = false, pS = 0, eS = 0, hasBoss = false;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const o = grid[r][c].owner;
-      if (o === PLAYER) { hasP = true; pS += grid[r][c].power; }
-      if (o === ENEMY)  { hasE = true; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
-    }
-    if (cfg.isBoss && !hasBoss && hasP) { showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'); return true; }
-    if (!hasE) { showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'); return true; }
-    if (!hasP) { showEnd('Defeat', `Stage ${currentStage} — enemy took all your hexes.`, 'lose'); return true; }
-    if (turn >= cfg.maxTurns) {
-      if (pS > eS) showEnd('Victory!', `Time's up — you win! ⚡${pS} vs ⚡${eS}`, 'win');
-      else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡${eS} vs ⚡${pS}`, 'lose');
-      else showEnd('Draw', `Tied at ⚡${pS}!`, 'draw');
-      return true;
-    }
-    return false;
+function checkGameOverAI() {
+  let hasP = false, hasE = false, pS = 0, eS = 0, hasBoss = false, pH = 0;  // ← ADD pH counter
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const o = grid[r][c].owner;
+    if (o === PLAYER) { hasP = true; pS += grid[r][c].power; pH++; }      // ← ADD pH++
+    if (o === ENEMY)  { hasE = true; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
+  }
+  
+  if (cfg.isBoss && !hasBoss && hasP) { 
+    awardHexoneX(pH, 0, true);  // ← ADD
+    showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'); 
+    return true; 
+  }
+  if (!hasE) { 
+    awardHexoneX(pH, 0, true);  // ← ADD
+    showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'); 
+    return true; 
+  }
+  if (!hasP) { 
+    awardHexoneX(pH, 0, false);  // ← ADD
+    showEnd('Defeat', `Stage ${currentStage} — enemy took all your hexes.`, 'lose'); 
+    return true; 
+  }
+  if (turn >= cfg.maxTurns) {
+    const won = pS > eS;
+    awardHexoneX(pH, 0, won);    // ← ADD
+    if (won) showEnd('Victory!', `Time's up — you win! ⚡${pS} vs ⚡${eS}`, 'win');
+    else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡${eS} vs ⚡${pS}`, 'lose');
+    else showEnd('Draw', `Tied at ⚡${pS}!`, 'draw');
+    return true;
+  }
+  return false;
+}
+
+function checkGameOverMP() {
+  let p1H=0, p2H=0, p1S=0, p2S=0;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const cell = grid[r][c];
+    if (cell.owner === PLAYER)  { p1H++; p1S += cell.power; }
+    if (cell.owner === PLAYER2) { p2H++; p2S += cell.power; }
   }
 
-  function checkGameOverMP() {
-    let p1H=0, p2H=0, p1S=0, p2S=0;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const cell = grid[r][c];
-      if (cell.owner === PLAYER)  { p1H++; p1S += cell.power; }
-      if (cell.owner === PLAYER2) { p2H++; p2S += cell.power; }
-    }
+  const p1Name = (gameMode === 'online' && onlineSide === PLAYER2) ? 'Opponent' : 'Player 1';
+  const p2Name = (gameMode === 'online' && onlineSide === PLAYER)  ? 'Opponent' : 'Player 2';
+  const myHexes = (gameMode === 'online' && onlineSide === PLAYER) ? p1H : p2H;  // ← ADD
+  const myWin = (p1H === 0 && p2Name === 'Opponent') || (p2H === 0 && p1Name === 'Opponent') ||
+                (turn >= cfg.maxTurns && ((p1S > p2S && p1Name === 'Opponent') || (p2S > p1S && p2Name === 'Opponent')));
 
-    const p1Name = (gameMode === 'online' && onlineSide === PLAYER2) ? 'Opponent' : 'Player 1';
-    const p2Name = (gameMode === 'online' && onlineSide === PLAYER)  ? 'Opponent' : 'Player 2';
-
-    if (p2H === 0) {
-      showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, p1Name === 'Opponent' ? 'lose' : 'win'); return true;
-    }
-    if (p1H === 0) {
-      showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, p2Name === 'Opponent' ? 'lose' : 'win'); return true;
-    }
-    if (turn >= cfg.maxTurns) {
-      if (p1S > p2S) {
-        showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
-      } else if (p2S > p1S) {
-        showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
-      } else {
-        showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
-      }
-      return true;
-    }
-    return false;
+  if (p2H === 0) {
+    awardHexoneX(p1H, p2H, p1Name !== 'Opponent');  // ← ADD
+    showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, p1Name === 'Opponent' ? 'lose' : 'win'); 
+    return true;
   }
+  if (p1H === 0) {
+    awardHexoneX(p2H, p1H, p2Name !== 'Opponent');  // ← ADD  
+    showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, p2Name === 'Opponent' ? 'lose' : 'win'); 
+    return true;
+  }
+  if (turn >= cfg.maxTurns) {
+    const win1 = p1S > p2S;
+    awardHexoneX(win1 ? p1H : p2H, win1 ? p2H : p1H, win1 === (p1Name !== 'Opponent'));  // ← ADD
+    if (p1S > p2S) {
+      showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
+    } else if (p2S > p1S) {
+      showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
+    } else {
+      showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
+    }
+    return true;
+  }
+  return false;
+}
 
   function showEnd(title, desc, type) {
     phase = 'gameover';
