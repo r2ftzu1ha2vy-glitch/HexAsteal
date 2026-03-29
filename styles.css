@@ -101,14 +101,33 @@ body {
 
 /* ---- Board ---- */
 #board {
+  --board-bg: radial-gradient(ellipse at center, #111124 0%, #0a0a14 100%);
+  --board-p2-bg: radial-gradient(ellipse at center, #0a0f1f 0%, #0a0a14 100%);
+  --board-boss-bg: radial-gradient(ellipse at center, #1a0a0a 0%, #0a0a14 100%);
   flex: 1; display: flex; align-items: center; justify-content: center;
   padding: 6px; overflow: hidden; min-height: 0;
-  background: radial-gradient(ellipse at center, #111124 0%, #0a0a14 100%);
+  background: var(--board-bg);
   transition: background 0.5s ease;
 }
 #board.boss-mode {
-  background: radial-gradient(ellipse at center, #1a0a0a 0%, #0a0a14 100%);
+  background: var(--board-boss-bg);
 }
+#board.theme-original {
+  --board-bg: radial-gradient(ellipse at center, #111124 0%, #0a0a14 100%);
+  --board-p2-bg: radial-gradient(ellipse at center, #0a0f1f 0%, #0a0a14 100%);
+  --board-boss-bg: radial-gradient(ellipse at center, #1a0a0a 0%, #0a0a14 100%);
+}
+#board.theme-summer {
+  --board-bg: radial-gradient(ellipse at center, #b9d7f3 0%, #d8d1e8 32%, #bfd3c1 60%, #8f93a2 100%);
+  --board-p2-bg: radial-gradient(ellipse at center, #9fcaf0 0%, #d8c6e7 36%, #b4d0be 68%, #7e8796 100%);
+  --board-boss-bg: radial-gradient(ellipse at center, #d3b7cb 0%, #b5bfce 46%, #7c8492 100%);
+}
+#board.theme-spring {
+  --board-bg: radial-gradient(ellipse at center, #ffe98a 0%, #ffb587 32%, #98dd8f 64%, #c8d6ae 100%);
+  --board-p2-bg: radial-gradient(ellipse at center, #fff19c 0%, #ff9f73 28%, #73d56d 64%, #b8d5a5 100%);
+  --board-boss-bg: radial-gradient(ellipse at center, #ffb25e 0%, #ff8d6d 40%, #84c56a 100%);
+}
+
 
 #grid { width: 100%; height: 100%; display: block; }
 
@@ -127,6 +146,22 @@ body {
 /* ---- Player 2 color (local multiplayer) ---- */
 .hex-player2  { fill: #172554; stroke: #3b82f6; stroke-width: 1.5; }
 .player2-dot  { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.5); }
+
+/* ---- Style ---- */
+.hex-design-overlay {
+  fill: none;
+  opacity: 0.42;
+  pointer-events: none;
+}
+.hex-cosmetic {
+  font-size: 12px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+.hex-cosmetic-horns { fill: #f87171; }
+.hex-cosmetic-halo  { fill: #fde68a; }
+.hex-cosmetic-crown { fill: #fbbf24; }
 
 /* ---- Boss Hex ---- */
 .hex-boss {
@@ -520,6 +555,57 @@ body {
 
 #online-back-btn { display: block; margin-top: 10px; }
 
+.online-room-settings {
+  margin: 14px 0 16px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(10, 14, 28, 0.72);
+}
+.online-setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.online-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.online-setting-full { margin-top: 2px; }
+.online-setting-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.online-setting-input,
+.online-setting-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(56,189,248,0.18);
+  background: #0e0e1c;
+  color: #e5e7eb;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.online-setting-input:focus,
+.online-setting-select:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.12);
+}
+.room-settings-summary {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
 /* ---- Local 2P banner ---- */
 .local-banner-card {
   max-width: 300px; padding: 32px 28px;
@@ -530,7 +616,7 @@ body {
 .local-banner-card p { font-size: 13px; color: #9ca3af; margin-bottom: 20px; }
 
 #board.p2-turn {
-  background: radial-gradient(ellipse at center, #0a0f1f 0%, #0a0a14 100%);
+  background: var(--board-p2-bg);
 }
 
 .conn-badge {
