@@ -9,8 +9,9 @@
 <body>
   <div id="app">
     <audio id="music" loop autoplay>
-    <source src="https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled.mp3" type="audio/mpeg">
-</audio>
+      <source src="https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled.mp3" type="audio/mpeg">
+    </audio>
+
     <!-- HUD -->
     <header id="hud">
       <div class="hud-section stage-section">
@@ -37,6 +38,8 @@
         <span class="sep">·</span>
         <span class="icon">⚡</span><span id="e-power" class="value">14</span>
       </div>
+      <!-- FIX: Shop button is now INSIDE #hud, uses HexAsteal.showShop() -->
+      <button id="btn-shop" class="hud-shop-btn" onclick="HexAsteal.showShop()" title="Open Shop">🛒 0</button>
       <button id="btn-sound" onclick="HexAsteal.toggleSound()" title="Toggle Sound">🔊</button>
     </header>
 
@@ -136,7 +139,7 @@
     </div>
   </div>
 
-  <!-- ========== MODE SELECT OVERLAY ========== -->
+  <!-- Mode Select Overlay -->
   <div id="mode-overlay" class="overlay-screen hidden">
     <div class="overlay-card mode-card">
       <h2>🎮 Game Mode</h2>
@@ -162,10 +165,11 @@
     </div>
   </div>
 
-  <!-- ========== ONLINE LOBBY OVERLAY ========== -->
+  <!-- Online Lobby Overlay (single, no duplicate) -->
   <div id="online-overlay" class="overlay-screen hidden">
     <div class="overlay-card online-card">
       <h2 id="online-title">🌐 Online Play</h2>
+
       <div id="online-create-join">
         <p class="mode-sub">Create a new room or join an existing one</p>
         <div class="online-btns">
@@ -173,6 +177,7 @@
           <button class="btn-ghost" onclick="HexAsteal.showJoinRoom()">🔑 Join Room</button>
         </div>
       </div>
+
       <div id="online-join-form" class="hidden">
         <p class="mode-sub">Enter the 4-digit room code</p>
         <div class="code-inputs">
@@ -186,6 +191,7 @@
           <button class="btn-ghost" onclick="HexAsteal.showCreateJoin()">Back</button>
         </div>
       </div>
+
       <div id="online-waiting" class="hidden">
         <div class="room-code-display">
           <span class="room-code-label">ROOM CODE</span>
@@ -196,101 +202,69 @@
         <div class="waiting-dots"><span></span><span></span><span></span></div>
         <button class="btn-ghost" onclick="HexAsteal.cancelOnline()" style="margin-top:14px">Cancel</button>
       </div>
+
       <div id="online-connecting" class="hidden">
         <p class="mode-sub">Connecting…</p>
         <div class="waiting-dots"><span></span><span></span><span></span></div>
       </div>
+
       <button class="btn-ghost" id="online-back-btn" onclick="HexAsteal.cancelOnline()" style="margin-top:10px">← Back</button>
     </div>
   </div>
 
-<!-- Online Mode Overlay -->
-<div id="online-overlay" class="overlay hidden">
-  <div class="modal">
-    <div id="online-create-join">
-      <h2>🌐 Multiplayer</h2>
-      <button onclick="onlineCreate()">➕ Create Room</button>
-      <button onclick="showJoinRoom()">🔗 Join Room</button>
-      <button id="online-back-btn" onclick="cancelOnline()">← Back</button>
+  <!-- Chat Panel (online only) -->
+  <div id="chat-panel" class="chat-panel hidden">
+    <div id="chat-header" class="chat-header" onclick="HexAsteal.toggleChat()">
+      💬 Chat <span id="chat-unread" class="chat-unread hidden">0</span>
     </div>
-
-    <div id="online-waiting" class="hidden">
-      <h3>Room Code</h3>
-      <p id="room-code-big" style="font-size:48px;font-weight:bold;letter-spacing:8px;"></p>
-      <button onclick="copyRoomCode()">📋 Copy Code</button>
-      <p id="waiting-text">Waiting for opponent…</p>
-      <button id="online-back-btn" onclick="cancelOnline()">← Cancel</button>
-    </div>
-
-    <div id="online-join-form" class="hidden">
-      <h3>Enter Room Code</h3>
-      <div style="display:flex;gap:8px;margin:16px 0;">
-        <input id="cd0" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
-        <input id="cd1" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
-        <input id="cd2" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
-        <input id="cd3" type="text" maxlength="1" style="width:50px;height:50px;font-size:24px;text-align:center;">
+    <div id="chat-body" class="chat-body">
+      <div id="chat-messages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" class="chat-input" maxlength="80" placeholder="Say something…" autocomplete="off"/>
+        <button class="chat-send-btn" onclick="HexAsteal.sendChat()">➤</button>
       </div>
-      <button onclick="onlineJoin()">🔗 Join</button>
-      <button id="online-back-btn" onclick="showCreateJoin()">← Back</button>
     </div>
+  </div>
 
-    <div id="online-connecting" class="hidden">
-      <p id="online-connecting-text">Connecting…</p>
-      <button id="online-back-btn" onclick="cancelOnline()">← Cancel</button>
+  <!-- Rematch Overlay -->
+  <div id="rematch-overlay" class="overlay-screen hidden">
+    <div class="overlay-card rematch-card">
+      <div id="rematch-icon" class="rematch-icon">🔄</div>
+      <h2 id="rematch-title">Rematch?</h2>
+      <p id="rematch-sub">Waiting for opponent…</p>
+      <div class="rematch-btns">
+        <button class="btn-primary" id="btn-rematch-yes" onclick="HexAsteal.voteRematch(true)">✅ Rematch</button>
+        <button class="btn-ghost"   id="btn-rematch-no"  onclick="HexAsteal.voteRematch(false)">❌ Leave</button>
+      </div>
+      <div id="rematch-dots" class="waiting-dots hidden"><span></span><span></span><span></span></div>
     </div>
   </div>
-</div>
-
-  <!-- ========== CHAT PANEL (online only) ========== -->
-<div id="chat-panel" class="chat-panel hidden">
-  <div id="chat-header" class="chat-header" onclick="HexAsteal.toggleChat()">
-    💬 Chat <span id="chat-unread" class="chat-unread hidden">0</span>
-  </div>
-  <div id="chat-body" class="chat-body">
-    <div id="chat-messages" class="chat-messages"></div>
-    <div class="chat-input-row">
-      <input id="chat-input" class="chat-input" maxlength="80" placeholder="Say something…" autocomplete="off"/>
-      <button class="chat-send-btn" onclick="HexAsteal.sendChat()">➤</button>
-    </div>
-  </div>
-</div>
-
-<!-- ========== REMATCH OVERLAY ========== -->
-<div id="rematch-overlay" class="overlay-screen hidden">
-  <div class="overlay-card rematch-card">
-    <div id="rematch-icon" class="rematch-icon">🔄</div>
-    <h2 id="rematch-title">Rematch?</h2>
-    <p id="rematch-sub">Waiting for opponent…</p>
-    <div class="rematch-btns">
-      <button class="btn-primary" id="btn-rematch-yes" onclick="HexAsteal.voteRematch(true)">✅ Rematch</button>
-      <button class="btn-ghost"   id="btn-rematch-no"  onclick="HexAsteal.voteRematch(false)">❌ Leave</button>
-    </div>
-    <div id="rematch-dots" class="waiting-dots hidden"><span></span><span></span><span></span></div>
-  </div>
-</div>
 
   <!-- Shop Overlay -->
-<div id="shop-overlay" class="overlay-screen hidden">
-  <div class="overlay-card shop-card">
-    <h2>🛒 HexoneX Shop</h2>
-    <div id="hexoneX-balance" style="font-size:18px;font-weight:800;color:#fbbf24;margin-bottom:20px;">0</div>
-    
-    <div class="shop-tabs">
-      <button class="tab-btn active" onclick="switchTab('colors')">Colors</button>
-      <button class="tab-btn" onclick="switchTab('designs')">Designs</button>
-      <button class="tab-btn" onclick="switchTab('cosmetics')">Cosmetics</button>
-    </div>
-    
-    <div id="shop-colors" class="shop-grid"></div>
-    <div id="shop-designs" class="shop-grid" style="display:none;"></div>
-    <div id="shop-cosmetics" class="shop-grid" style="display:none;"></div>
-    
-    <button class="btn-primary" onclick="document.getElementById('shop-overlay').classList.add('hidden')">Close Shop</button>
-  </div>
-</div>
+  <div id="shop-overlay" class="overlay-screen hidden">
+    <div class="overlay-card shop-card">
+      <h2>🛒 HexoneX Shop</h2>
+      <div class="hexonex-balance">
+        <span>💰 Balance:</span>
+        <span id="hexoneX-balance" class="balance-amount">0</span>
+        <span>HexoneX</span>
+      </div>
 
-<!-- Shop button in HUD (add to #hud) -->
-<button id="btn-shop" onclick="showShop()" style="padding:4px 8px;font-size:12px;">🛒 0</button>
+      <div class="shop-tabs">
+        <!-- FIX: switchTab now calls HexAsteal.switchTab -->
+        <button class="tab-btn active" onclick="HexAsteal.switchTab('colors')">🎨 Colors</button>
+        <button class="tab-btn" onclick="HexAsteal.switchTab('designs')">✏️ Designs</button>
+        <button class="tab-btn" onclick="HexAsteal.switchTab('cosmetics')">✨ Cosmetics</button>
+      </div>
+
+      <div id="shop-colors" class="shop-grid"></div>
+      <div id="shop-designs" class="shop-grid" style="display:none;"></div>
+      <div id="shop-cosmetics" class="shop-grid" style="display:none;"></div>
+
+      <button class="btn-ghost" onclick="HexAsteal.closeShop()" style="margin-top:16px;width:100%">Close Shop</button>
+    </div>
+  </div>
+
   <!-- Local 2P turn banner -->
   <div id="local-turn-banner" class="overlay-screen hidden">
     <div class="overlay-card local-banner-card">
@@ -301,6 +275,6 @@
     </div>
   </div>
 
-<script type="module" src="./script.js"></script>
+  <script type="module" src="./script.js"></script>
 </body>
 </html>
