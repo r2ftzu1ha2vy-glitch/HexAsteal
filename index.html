@@ -25,7 +25,7 @@
         <span class="label turn-max" id="turn-max">/ 40</span>
       </div>
       <div class="hud-section player-section">
-        <span class="color-dot player-dot"></span>
+        <span class="color-dot player-dot" id="player-dot"></span>
         <span class="label" id="p-label">YOU</span>
         <span id="p-hexes" class="value">4</span>
         <span class="sep">·</span>
@@ -170,13 +170,37 @@
     <div class="overlay-card online-card">
       <h2 id="online-title">🗺 Online Play</h2>
 
-      <div id="online-create-join">
-        <p class="mode-sub">Create a new room or join an existing one</p>
-        <div class="online-btns">
-          <button class="btn-primary" onclick="HexAsteal.onlineCreate()">✚ Create Room</button>
-          <button class="btn-ghost" onclick="HexAsteal.showJoinRoom()">ꗃ Join Room</button>
-        </div>
-      </div>
+<div id="online-create-join">
+  <p class="mode-sub">Create a new room or join an existing one</p>
+
+  <div class="online-room-settings">
+    <div class="online-setting-grid">
+      <label class="online-setting">
+        <span class="online-setting-label">Power-ups</span>
+        <input id="room-powerups" class="online-setting-input" type="number" min="0" max="18" value="8">
+      </label>
+
+      <label class="online-setting">
+        <span class="online-setting-label">Start hexes</span>
+        <input id="room-start-hexes" class="online-setting-input" type="number" min="2" max="8" value="4">
+      </label>
+    </div>
+
+    <label class="online-setting online-setting-full">
+      <span class="online-setting-label">Background</span>
+      <select id="room-background" class="online-setting-select">
+        <option value="original">Original</option>
+        <option value="summer">Summer</option>
+        <option value="spring">Spring</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="online-btns">
+    <button class="btn-primary" onclick="HexAsteal.onlineCreate()">✚ Create Room</button>
+    <button class="btn-ghost" onclick="HexAsteal.showJoinRoom()">ꗃ Join Room</button>
+  </div>
+</div>
 
       <div id="online-join-form" class="hidden">
         <p class="mode-sub">Enter the 4-digit room code</p>
