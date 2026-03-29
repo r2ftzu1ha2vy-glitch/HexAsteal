@@ -188,7 +188,7 @@ const HexAsteal = (function () {
   }
 
   // =========== PROGRESS ===========
-const SAVEKEY = 'hexastealv1';
+const SAVE_KEY = 'hexastealv1';
 let progress = {
   stage: 1, completed: [], tutDone: false, soundOn: true,
   hexoneX: 0,  // Currency
