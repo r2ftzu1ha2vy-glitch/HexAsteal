@@ -826,13 +826,6 @@ function cancelOnline() {
     set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
   }
 
-  dbRef = null;
-  roomCode = null;
-  lastSeenMsgId = null;
-  onlineOverlay.classList.add('hidden');
-  if (gameMode === 'online') gameMode = 'ai';
-}
-
     dbRef = null;
     roomCode = null;
     lastSeenMsgId = null;
