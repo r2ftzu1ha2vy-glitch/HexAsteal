@@ -1,5 +1,4 @@
 // =========== FIREBASE (loaded as module) ===========
-// index.html must load this file with: <script type="module" src="./script.js"></script>
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
 import { getDatabase, ref, set, update, onValue, off } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
@@ -16,10 +15,10 @@ const firebaseConfig = {
 const _app = initializeApp(firebaseConfig);
 const database = getDatabase(_app);
 
-// =========== FIREBASE STATE (module-level, single source of truth) ===========
+// =========== FIREBASE STATE ===========
 let dbRef = null;
 let roomCode = null;
-let onlineSide = 'player';      // set properly in onlineCreate / onlineJoin
+let onlineSide = 'player';
 let moveListener = null;
 let statusListener = null;
 let roomListener = null;
@@ -27,7 +26,7 @@ let lastSeenMsgId = null;
 let chatOpen      = false;
 let chatListener  = null;
 let unreadCount   = 0;
-let rematchVoted  = false;          // did I vote?
+let rematchVoted  = false;
 let rematchListener = null;
 let rematchTimeout  = null;
 
@@ -55,7 +54,6 @@ const HexAsteal = (function () {
   const PU_KEYS = Object.keys(POWERUPS);
 
   // =========== GAME MODE ===========
-  // 'ai' | 'local' | 'online'
   let gameMode = 'ai';
   let localTurn = PLAYER;
 
@@ -188,142 +186,179 @@ const HexAsteal = (function () {
   }
 
   // =========== PROGRESS ===========
-const SAVE_KEY = 'hexastealv1';
-let progress = {
-  stage: 1, completed: [], tutDone: false, soundOn: true,
-  hexoneX: 0,  // Currency
-  ownedSkins: {
-    colors: ['green'],     // Default
-    designs: ['none'],
-    cosmetics: ['none']
-  },
-  equippedSkins: {
-    color: 'green',
-    design: 'none',
-    cosmetic: 'none'
-  }
-};
+  // FIX #1: Consistent constant name — was SAVEKEY in one place, SAVE_KEY in another
+  const SAVE_KEY = 'hexastealv1';
 
-  // All skins
-const SKINS = {
-  colors: [
-    {id: 'green', name: 'Classic Green', price: 0, stroke: '#22c55e', fill: '#14532d'},
-    {id: 'blue', name: 'Cyber Blue', price: 50, stroke: '#3b82f6', fill: '#172554'},
-    {id: 'purple', name: 'Void Purple', price: 75, stroke: '#a855f7', fill: '#2e1065'},
-    {id: 'gold', name: 'Golden Glory', price: 150, stroke: '#fbbf24', fill: '#92400e'},
-    {id: 'rainbow', name: 'Rainbow', price: 300, stroke: '#ef4444', fill: '#991b1b'}
-  ],
-  designs: [
-    {id: 'none', name: 'Plain', price: 0},
-    {id: 'stripes', name: 'Stripes', price: 100},
-    {id: 'swirl', name: 'Swirl', price: 125},
-    {id: 'dots', name: 'Dots', price: 175}
-  ],
-  cosmetics: [
-    {id: 'none', name: 'None', price: 0},
-    {id: 'horns', name: 'Devil Horns', price: 200},
-    {id: 'halo', name: 'Angel Halo', price: 200},
-    {id: 'crown', name: 'Victory Crown', price: 350}
-  ]
-};
-
-// Award HexoneX after games
-function awardHexoneX(pHexes, eHexes, won) {
-  let earnings;
-  if (won) {
-    earnings = pHexes * 5;
-    progress.hexoneX += earnings;
-    setStatus(`+${earnings} HexoneX! 💰 (Win Bonus)`);
-  } else {
-    earnings = -(Math.floor(pHexes / 2) * 2);
-    progress.hexoneX = Math.max(0, progress.hexoneX + earnings);
-    setStatus(`${earnings} HexoneX 💸 (Loss Penalty)`);
-  }
-  saveProgress();
-  updateShopButton();
-}
-
-// Buy/Equip skins
-function buySkin(type, id, price) {
-  const skin = SKINS[type].find(s => s.id === id);
-  if (!skin) return;
-  
-  if (!progress.ownedSkins[type].includes(id)) {
-    if (progress.hexoneX < price) {
-      setStatus('❌ Not enough HexoneX!');
-      return;
+  let progress = {
+    stage: 1, completed: [], tutDone: false, soundOn: true,
+    hexoneX: 0,
+    ownedSkins: {
+      colors: ['green'],
+      designs: ['none'],
+      cosmetics: ['none']
+    },
+    equippedSkins: {
+      color: 'green',
+      design: 'none',
+      cosmetic: 'none'
     }
-    progress.ownedSkins[type].push(id);
-    progress.hexoneX -= price;
+  };
+
+  const SKINS = {
+    colors: [
+      {id: 'green',   name: 'Classic Green', price: 0,   stroke: '#22c55e', fill: '#14532d'},
+      {id: 'blue',    name: 'Cyber Blue',    price: 50,  stroke: '#3b82f6', fill: '#172554'},
+      {id: 'purple',  name: 'Void Purple',   price: 75,  stroke: '#a855f7', fill: '#2e1065'},
+      {id: 'gold',    name: 'Golden Glory',  price: 150, stroke: '#fbbf24', fill: '#92400e'},
+      {id: 'rainbow', name: 'Rainbow',       price: 300, stroke: '#ef4444', fill: '#991b1b'}
+    ],
+    designs: [
+      {id: 'none',    name: 'Plain',   price: 0},
+      {id: 'stripes', name: 'Stripes', price: 100},
+      {id: 'swirl',   name: 'Swirl',   price: 125},
+      {id: 'dots',    name: 'Dots',    price: 175}
+    ],
+    cosmetics: [
+      {id: 'none',  name: 'None',          price: 0},
+      {id: 'horns', name: 'Devil Horns',   price: 200},
+      {id: 'halo',  name: 'Angel Halo',    price: 200},
+      {id: 'crown', name: 'Victory Crown', price: 350}
+    ]
+  };
+
+  // FIX #3: Award status is shown briefly, then game-over takes over — use a timed status
+  function awardHexoneX(pHexes, _eHexes, won) {
+    let earnings;
+    if (won) {
+      earnings = pHexes * 5;
+      progress.hexoneX += earnings;
+      // Brief flash — showEnd() will overwrite after 1.5s
+      setStatus(`+${earnings} HexoneX! 💰 (Win Bonus)`);
+    } else {
+      earnings = -(Math.floor(pHexes / 2) * 2);
+      progress.hexoneX = Math.max(0, progress.hexoneX + earnings);
+      setStatus(`${earnings} HexoneX 💸 (Loss Penalty)`);
+    }
     saveProgress();
-    setStatus(`✅ Bought ${skin.name}!`);
-  } else {
-    progress.equippedSkins[type] = id;
-    saveProgress();
-    setStatus(`🎨 Equipped ${skin.name}!`);
+    updateShopButton();
   }
-  showShop();
-  updateShopButton();
-  render();  // Refresh hex colors
-}
 
-// Update shop button in HUD
-function updateShopButton() {
-  const btn = document.getElementById('btn-shop');
-  if (btn) btn.textContent = `🛒 ${progress.hexoneX}`;
-}
+  // FIX #2: buySkin / showShop / updateShopButton all needed in public API — defined here
+  function buySkin(type, id, price) {
+    const skin = SKINS[type] && SKINS[type].find(s => s.id === id);
+    if (!skin) return;
 
-// Show shop overlay
-function showShop() {
-  const overlay = document.getElementById('shop-overlay');
-  document.getElementById('hexoneX-balance').textContent = progress.hexoneX;
-  
-  // Colors
-  document.getElementById('shop-colors').innerHTML = SKINS.colors.map(skin => `
-    <div class="skin-item ${progress.ownedSkins.colors.includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.color === skin.id ? 'equipped' : ''}">
-      <div class="skin-preview" style="background:${skin.fill};border:2px solid ${skin.stroke};border-radius:8px;width:50px;height:50px;"></div>
-      <div>
-        <div>${skin.name}</div>
-        <small>${skin.price} HexoneX</small>
+    // FIX #7: Guard against missing ownedSkins keys from old save data
+    if (!progress.ownedSkins[type]) progress.ownedSkins[type] = [];
+
+    if (!progress.ownedSkins[type].includes(id)) {
+      if (progress.hexoneX < price) {
+        setStatus('❌ Not enough HexoneX!');
+        return;
+      }
+      progress.ownedSkins[type].push(id);
+      progress.hexoneX -= price;
+      saveProgress();
+      setStatus(`✅ Bought ${skin.name}!`);
+    } else {
+      progress.equippedSkins[type === 'colors' ? 'color' : type === 'designs' ? 'design' : 'cosmetic'] = id;
+      saveProgress();
+      setStatus(`🎨 Equipped ${skin.name}!`);
+    }
+    showShop();
+    updateShopButton();
+    render();
+  }
+
+  function updateShopButton() {
+    const btn = document.getElementById('btn-shop');
+    if (btn) btn.textContent = `🛒 ${progress.hexoneX}`;
+  }
+
+  function showShop() {
+    const overlay = document.getElementById('shop-overlay');
+    if (!overlay) return;
+    const balEl = document.getElementById('hexoneX-balance');
+    if (balEl) balEl.textContent = progress.hexoneX;
+
+    const colorsEl = document.getElementById('shop-colors');
+    if (colorsEl) colorsEl.innerHTML = SKINS.colors.map(skin => `
+      <div class="skin-item ${(progress.ownedSkins.colors || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.color === skin.id ? 'equipped' : ''}">
+        <div class="skin-preview" style="background:${skin.fill};border:2px solid ${skin.stroke};border-radius:8px;width:50px;height:50px;"></div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
+          <small style="color:#fbbf24">${skin.price} HexoneX</small>
+        </div>
+        <button class="shop-action-btn" onclick="HexAsteal.buySkin('colors', '${skin.id}', ${skin.price})">
+          ${(progress.ownedSkins.colors || []).includes(skin.id) ? 'Equip' : 'Buy'}
+        </button>
       </div>
-      <button onclick="buySkin('colors', '${skin.id}', ${skin.price})">
-        ${progress.ownedSkins.colors.includes(skin.id) ? 'Equip' : 'Buy'}
-      </button>
-    </div>
-  `).join('');
-  
-  // Designs (similar structure)
-  document.getElementById('shop-designs').innerHTML = SKINS.designs.map(skin => `
-    <div class="skin-item ${progress.ownedSkins.designs.includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.design === skin.id ? 'equipped' : ''}">
-      <div class="skin-preview design-preview">${skin.id !== 'none' ? skin.id : ''}</div>
-      <div>${skin.name}<br><small>${skin.price} HexoneX</small></div>
-      <button onclick="buySkin('designs', '${skin.id}', ${skin.price})">
-        ${progress.ownedSkins.designs.includes(skin.id) ? 'Equip' : 'Buy'}
-      </button>
-    </div>
-  `).join('');
-  
-  // Cosmetics
-  document.getElementById('shop-cosmetics').innerHTML = SKINS.cosmetics.map(skin => `
-    <div class="skin-item ${progress.ownedSkins.cosmetics.includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
-      <div class="skin-preview cosmetic-preview">${skin.id}</div>
-      <div>${skin.name}<br><small>${skin.price} HexoneX</small></div>
-      <button onclick="buySkin('cosmetics', '${skin.id}', ${skin.price})">
-        ${progress.ownedSkins.cosmetics.includes(skin.id) ? 'Equip' : 'Buy'}
-      </button>
-    </div>
-  `).join('');
-  
-  overlay.classList.remove('hidden');
-}
-  
+    `).join('');
+
+    const designsEl = document.getElementById('shop-designs');
+    if (designsEl) designsEl.innerHTML = SKINS.designs.map(skin => `
+      <div class="skin-item ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.design === skin.id ? 'equipped' : ''}">
+        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:18px;">${skin.id !== 'none' ? skin.id[0].toUpperCase() : '—'}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
+          <small style="color:#fbbf24">${skin.price} HexoneX</small>
+        </div>
+        <button class="shop-action-btn" onclick="HexAsteal.buySkin('designs', '${skin.id}', ${skin.price})">
+          ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'Equip' : 'Buy'}
+        </button>
+      </div>
+    `).join('');
+
+    const cosmeticsEl = document.getElementById('shop-cosmetics');
+    if (cosmeticsEl) cosmeticsEl.innerHTML = SKINS.cosmetics.map(skin => `
+      <div class="skin-item ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
+        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:22px;">${skin.id === 'horns' ? '😈' : skin.id === 'halo' ? '😇' : skin.id === 'crown' ? '👑' : '—'}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
+          <small style="color:#fbbf24">${skin.price} HexoneX</small>
+        </div>
+        <button class="shop-action-btn" onclick="HexAsteal.buySkin('cosmetics', '${skin.id}', ${skin.price})">
+          ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'Equip' : 'Buy'}
+        </button>
+      </div>
+    `).join('');
+
+    overlay.classList.remove('hidden');
+  }
+
+  function closeShop() {
+    const overlay = document.getElementById('shop-overlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  // FIX #2 (continued): switchTab must be accessible from HTML onclick
+  function switchTab(tab) {
+    ['colors', 'designs', 'cosmetics'].forEach(t => {
+      const el = document.getElementById(`shop-${t}`);
+      if (el) el.style.display = (t === tab) ? '' : 'none';
+    });
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+      const tabs = ['colors', 'designs', 'cosmetics'];
+      btn.classList.toggle('active', tabs[i] === tab);
+    });
+  }
+
   function loadProgress() {
     try {
       const d = JSON.parse(localStorage.getItem(SAVE_KEY));
-      if (d) progress = { ...progress, ...d };
-    } catch {}
+      if (d) {
+        progress = { ...progress, ...d };
+        // FIX #7: Ensure nested skin objects exist after merge (old saves won't have them)
+        if (!progress.ownedSkins) progress.ownedSkins = { colors: ['green'], designs: ['none'], cosmetics: ['none'] };
+        if (!progress.ownedSkins.colors)    progress.ownedSkins.colors    = ['green'];
+        if (!progress.ownedSkins.designs)   progress.ownedSkins.designs   = ['none'];
+        if (!progress.ownedSkins.cosmetics) progress.ownedSkins.cosmetics = ['none'];
+        if (!progress.equippedSkins) progress.equippedSkins = { color: 'green', design: 'none', cosmetic: 'none' };
+      }
+    } catch(e) {}
     SFX.on = progress.soundOn;
   }
+
   function saveProgress() {
     localStorage.setItem(SAVE_KEY, JSON.stringify(progress));
   }
@@ -594,14 +629,19 @@ function showShop() {
         }
 
         el.polygon.setAttribute('class', cls);
-        // Apply player skins
-if (cls.includes('hex-player') || cls.includes('hex-player2')) {
-  const colorSkin = SKINS.colors.find(s => s.id === progress.equippedSkins.color);
-  if (colorSkin) {
-    el.polygon.style.fill = colorSkin.fill;
-    el.polygon.style.stroke = colorSkin.stroke;
-  }
-}
+
+        // Apply equipped color skin to player hexes
+        if (cls.includes('hex-player') && !cls.includes('hex-player2')) {
+          const colorSkin = SKINS.colors.find(s => s.id === progress.equippedSkins.color);
+          if (colorSkin) {
+            el.polygon.style.fill = colorSkin.fill;
+            el.polygon.style.stroke = colorSkin.stroke;
+          }
+        } else {
+          el.polygon.style.fill = '';
+          el.polygon.style.stroke = '';
+        }
+
         el.text.textContent = cell.power;
 
         if (cell.powerup && cell.owner === NEUTRAL) {
@@ -670,6 +710,8 @@ if (cls.includes('hex-player') || cls.includes('hex-player2')) {
       bossBadge.classList.add('hidden');
       boardEl.classList.remove('boss-mode');
     }
+
+    updateShopButton();
   }
 
   // =========== TUTORIAL ===========
@@ -763,7 +805,7 @@ if (cls.includes('hex-player') || cls.includes('hex-player2')) {
 
     gameMode = mode;
     if (mode === 'ai') {
-      cancelOnline();  // was wrongly named cleanupOnline in the original
+      cancelOnline();
       startStage(progress.stage);
     } else if (mode === 'local') {
       cancelOnline();
@@ -858,7 +900,6 @@ if (cls.includes('hex-player') || cls.includes('hex-player2')) {
     document.getElementById('room-code-big').textContent = code;
     document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
 
-    // Generate seed immediately so both players get an identical map
     const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
 
     dbRef = ref(database, `rooms/${code}`);
@@ -931,353 +972,345 @@ if (cls.includes('hex-player') || cls.includes('hex-player2')) {
     });
   }
 
-function startOnlineMoveListener() {
-  if (!roomCode) return;
-  const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-  const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
+  function startOnlineMoveListener() {
+    if (!roomCode) return;
+    const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+    const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
 
-  moveListener = onValue(moveRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
-    if (data.sender === onlineSide) return;
-    lastSeenMsgId = data.msgId;
-    if (data.turn !== turn) {
-      console.warn('Turn mismatch:', data.turn, 'vs local', turn);
-      return;
+    moveListener = onValue(moveRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
+      if (data.sender === onlineSide) return;
+      lastSeenMsgId = data.msgId;
+      if (data.turn !== turn) {
+        console.warn('Turn mismatch:', data.turn, 'vs local', turn);
+        return;
+      }
+      handleOnlineMessage(data);
+    });
+  }
+
+  function cancelOnline() {
+    cleanupListeners();
+    cleanupRematch();
+    teardownChat();
+
+    if (dbRef && roomCode && onlineSide === PLAYER) {
+      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
     }
-    handleOnlineMessage(data);
-  });
-}
 
-function cancelOnline() {
-  SFX.click();
-  cleanupListeners();
-  cleanupRematch();
-  teardownChat();
-
-  if (dbRef && roomCode && onlineSide === PLAYER) {
-    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+    dbRef = null;
+    roomCode = null;
+    lastSeenMsgId = null;
+    onlineOverlay.classList.add('hidden');
+    if (gameMode === 'online') gameMode = 'ai';
   }
 
-  dbRef = null;
-  roomCode = null;
-  lastSeenMsgId = null;
-  onlineOverlay.classList.add('hidden');
-  if (gameMode === 'online') gameMode = 'ai';
-}
-
-function cleanupListeners() {
-  if (statusListener && roomCode) {
-    try { off(ref(database, `rooms/${roomCode}/status`)); } catch (e) {}
-    statusListener = null;
+  function cleanupListeners() {
+    if (statusListener && roomCode) {
+      try { off(ref(database, `rooms/${roomCode}/status`)); } catch (e) {}
+      statusListener = null;
+    }
+    if (roomListener && dbRef) {
+      try { off(dbRef); } catch (e) {}
+      roomListener = null;
+    }
+    if (moveListener && roomCode) {
+      try {
+        const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+        off(ref(database, `rooms/${roomCode}/${key}`));
+      } catch (e) {}
+      moveListener = null;
+    }
   }
-  if (roomListener && dbRef) {
-    try { off(dbRef); } catch (e) {}
-    roomListener = null;
+
+  function sendOnline(msg) {
+    if (!roomCode) return;
+    const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+    const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    const payload = {
+      msgId,
+      sender: onlineSide,
+      type: msg.type,
+      move: msg.move || null,
+      turn,
+      ts: Date.now()
+    };
+    update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
+      .catch(err => console.error('Send move failed:', err));
   }
-  if (moveListener && roomCode) {
-    try {
-      const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
-      off(ref(database, `rooms/${roomCode}/${key}`));
-    } catch (e) {}
-    moveListener = null;
+
+  function handleOnlineMessage(data) {
+    if (!data || !data.type) return;
+    if (data.sender === onlineSide) return;
+    if (data.type === 'move') {
+      if (phase !== 'wait-online') { console.warn('Wrong phase for move:', phase); return; }
+      applyRemoteMove(data.move);
+    } else if (data.type === 'skip') {
+      if (phase !== 'wait-online') { console.warn('Wrong phase for skip:', phase); return; }
+      applyRemoteSkip();
+    }
   }
-}
 
-function sendOnline(msg) {
-  if (!roomCode) return;
-  const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
-  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-  const payload = {
-    msgId,
-    sender: onlineSide,
-    type: msg.type,
-    move: msg.move || null,
-    turn,
-    ts: Date.now()
-  };
-  update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
-    .catch(err => console.error('Send move failed:', err));
-}
-
-function handleOnlineMessage(data) {
-  if (!data || !data.type) return;
-  if (data.sender === onlineSide) return;
-  if (data.type === 'move') {
-    if (phase !== 'wait-online') { console.warn('Wrong phase for move:', phase); return; }
-    applyRemoteMove(data.move);
-  } else if (data.type === 'skip') {
-    if (phase !== 'wait-online') { console.warn('Wrong phase for skip:', phase); return; }
-    applyRemoteSkip();
+  let _rngSeed = 0;
+  function seededRand(n) {
+    _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
+    return Math.abs(_rngSeed) % n;
   }
-}
 
-let _rngSeed = 0;
-function seededRand(n) {
-  _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
-  return Math.abs(_rngSeed) % n;
-}
+  function startOnlineGame(isHost, seed) {
+    gameMode = 'online';
+    cfg = mpConfig();
+    hideAllOverlays();
+    turn = 1;
+    phase = 'select';
+    selectedHex = null;
+    validTargets = [];
+    transferTargets = [];
+    animating = false;
 
-function startOnlineGame(isHost, seed) {
-  gameMode = 'online';
-  cfg = mpConfig();
-  hideAllOverlays();
-  turn = 1;
-  phase = 'select';
-  selectedHex = null;
-  validTargets = [];
-  transferTargets = [];
-  animating = false;
+    generateMapSeeded(seed || (Date.now() & 0xffff));
+    createBoard();
+    SFX.stageStart();
+    render();
 
-  generateMapSeeded(seed || (Date.now() & 0xffff));
-  createBoard();
-  SFX.stageStart();
-  render();
+    initChat();
 
-  initChat();
-
-  if (onlineSide === PLAYER) {
-    setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
-  } else {
-    phase = 'wait-online';
-    setStatus('🌐 Waiting for P1 to move…');
+    if (onlineSide === PLAYER) {
+      setStatus('🌐 Your turn (🟢 P1) — select a hex to attack or 🔄 transfer');
+    } else {
+      phase = 'wait-online';
+      setStatus('🌐 Waiting for P1 to move…');
+    }
+    render();
   }
-  render();
-}
 
   // =========== CHAT ===========
-function initChat() {
-  const panel = document.getElementById('chat-panel');
-  if (!panel) return;
-  panel.classList.remove('hidden');
-  panel.classList.add('collapsed');
-  chatOpen = false;
-  unreadCount = 0;
-  document.getElementById('chat-messages').innerHTML = '';
-  appendSystemMsg('Chat connected · say hi!');
-
-  if (chatListener && roomCode) {
-    try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
-  }
-
-  chatListener = onValue(ref(database, `rooms/${roomCode}/chat`), (snap) => {
-    const msgs = snap.val();
-    if (!msgs) return;
-    const container = document.getElementById('chat-messages');
-    const keys = Object.keys(msgs).sort();
-
-    // Only render messages we haven't rendered yet
-    const rendered = new Set([...container.querySelectorAll('[data-msgkey]')].map(el => el.dataset.msgkey));
-    let added = 0;
-    for (const k of keys) {
-      if (rendered.has(k)) continue;
-      const m = msgs[k];
-      const isMe = m.sender === onlineSide;
-      const div = document.createElement('div');
-      div.dataset.msgkey = k;
-      div.className = 'chat-msg ' + (isMe ? 'chat-msg-me' : 'chat-msg-them');
-      const nameDiv = document.createElement('div');
-      nameDiv.className = 'chat-msg-name';
-      nameDiv.textContent = isMe ? 'You' : 'Opponent';
-      div.appendChild(nameDiv);
-      div.appendChild(document.createTextNode(m.text));
-      container.appendChild(div);
-      added++;
-    }
-    if (added > 0) {
-      container.scrollTop = container.scrollHeight;
-      if (!chatOpen) {
-        unreadCount += added;
-        const badge = document.getElementById('chat-unread');
-        badge.textContent = unreadCount;
-        badge.classList.remove('hidden');
-      }
-    }
-  });
-
-  // Enter key to send
-  const input = document.getElementById('chat-input');
-  input.onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
-}
-
-function appendSystemMsg(text) {
-  const container = document.getElementById('chat-messages');
-  if (!container) return;
-  const div = document.createElement('div');
-  div.className = 'chat-msg chat-msg-system';
-  div.textContent = text;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-function toggleChat() {
-  SFX.click();
-  const panel = document.getElementById('chat-panel');
-  chatOpen = !chatOpen;
-  panel.classList.toggle('collapsed', !chatOpen);
-  if (chatOpen) {
+  function initChat() {
+    const panel = document.getElementById('chat-panel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    panel.classList.add('collapsed');
+    chatOpen = false;
     unreadCount = 0;
-    const badge = document.getElementById('chat-unread');
-    badge.classList.add('hidden');
-    badge.textContent = '0';
-    setTimeout(() => {
+    document.getElementById('chat-messages').innerHTML = '';
+    appendSystemMsg('Chat connected · say hi!');
+
+    if (chatListener && roomCode) {
+      try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
+    }
+
+    chatListener = onValue(ref(database, `rooms/${roomCode}/chat`), (snap) => {
+      const msgs = snap.val();
+      if (!msgs) return;
       const container = document.getElementById('chat-messages');
-      if (container) container.scrollTop = container.scrollHeight;
-      document.getElementById('chat-input').focus();
-    }, 50);
-  }
-}
+      const keys = Object.keys(msgs).sort();
 
-function sendChat() {
-  if (!roomCode) return;
-  const input = document.getElementById('chat-input');
-  const text = (input.value || '').trim();
-  if (!text) return;
-  input.value = '';
-  SFX.click();
-  const key = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  set(ref(database, `rooms/${roomCode}/chat/${key}`), {
-    sender: onlineSide,
-    text: text.slice(0, 80),
-    ts: Date.now()
-  }).catch(console.error);
-}
-
-function teardownChat() {
-  const panel = document.getElementById('chat-panel');
-  if (panel) panel.classList.add('hidden');
-  if (chatListener && roomCode) {
-    try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
-    chatListener = null;
-  }
-  chatOpen = false;
-  unreadCount = 0;
-}
-
-// =========== REMATCH ===========
-function showRematch(iWon) {
-  rematchVoted = false;
-  const overlay = document.getElementById('rematch-overlay');
-  const icon    = document.getElementById('rematch-icon');
-  const title   = document.getElementById('rematch-title');
-  const sub     = document.getElementById('rematch-sub');
-  const yesBtn  = document.getElementById('btn-rematch-yes');
-  const noBtn   = document.getElementById('btn-rematch-no');
-  const dots    = document.getElementById('rematch-dots');
-
-  icon.textContent  = iWon ? '🏆' : '😤';
-  title.textContent = iWon ? 'You Won!' : 'You Lost!';
-  sub.textContent   = 'Waiting for opponent…';
-  yesBtn.disabled   = false;
-  noBtn.disabled    = false;
-  dots.classList.add('hidden');
-
-  overlay.classList.remove('hidden');
-
-  // Clear any previous rematch data
-  update(ref(database, `rooms/${roomCode}`), {
-    [`rematch_${onlineSide}`]: null
-  }).catch(console.error);
-
-  // Listen for both votes
-  rematchListener = onValue(ref(database, `rooms/${roomCode}`), (snap) => {
-    const data = snap.val();
-    if (!data) return;
-    const myVote   = data[`rematch_${onlineSide}`];
-    const oppSide  = onlineSide === PLAYER ? PLAYER2 : PLAYER;
-    const oppVote  = data[`rematch_${oppSide}`];
-
-    if (myVote === true && oppVote === true) {
-      // Both want rematch — start a new game
-      cleanupRematch();
-      overlay.classList.add('hidden');
-      const newSeed = onlineSide === PLAYER
-        ? ((Date.now() & 0xffff) + Math.floor(Math.random() * 1000))
-        : null;
-      if (onlineSide === PLAYER) {
-        update(ref(database, `rooms/${roomCode}`), { rematchSeed: newSeed, rematchSeedSet: true })
-          .catch(console.error);
-        doOnlineRematch(newSeed);
-      } else {
-        // P2 waits for seed from P1 — already received if oppVote set first
-        if (data.rematchSeed) doOnlineRematch(data.rematchSeed);
-        else {
-          // Wait briefly for seed to arrive
-          const seedWait = onValue(ref(database, `rooms/${roomCode}/rematchSeed`), (seedSnap) => {
-            if (seedSnap.val()) {
-              off(ref(database, `rooms/${roomCode}/rematchSeed`));
-              doOnlineRematch(seedSnap.val());
-            }
-          });
+      const rendered = new Set([...container.querySelectorAll('[data-msgkey]')].map(el => el.dataset.msgkey));
+      let added = 0;
+      for (const k of keys) {
+        if (rendered.has(k)) continue;
+        const m = msgs[k];
+        const isMe = m.sender === onlineSide;
+        const div = document.createElement('div');
+        div.dataset.msgkey = k;
+        div.className = 'chat-msg ' + (isMe ? 'chat-msg-me' : 'chat-msg-them');
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'chat-msg-name';
+        nameDiv.textContent = isMe ? 'You' : 'Opponent';
+        div.appendChild(nameDiv);
+        div.appendChild(document.createTextNode(m.text));
+        container.appendChild(div);
+        added++;
+      }
+      if (added > 0) {
+        container.scrollTop = container.scrollHeight;
+        if (!chatOpen) {
+          unreadCount += added;
+          const badge = document.getElementById('chat-unread');
+          badge.textContent = unreadCount;
+          badge.classList.remove('hidden');
         }
       }
-    } else if (myVote === false || oppVote === false) {
-      // Someone said no — end session
+    });
+
+    const input = document.getElementById('chat-input');
+    input.onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
+  }
+
+  function appendSystemMsg(text) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg-system';
+    div.textContent = text;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function toggleChat() {
+    SFX.click();
+    const panel = document.getElementById('chat-panel');
+    chatOpen = !chatOpen;
+    panel.classList.toggle('collapsed', !chatOpen);
+    if (chatOpen) {
+      unreadCount = 0;
+      const badge = document.getElementById('chat-unread');
+      badge.classList.add('hidden');
+      badge.textContent = '0';
+      setTimeout(() => {
+        const container = document.getElementById('chat-messages');
+        if (container) container.scrollTop = container.scrollHeight;
+        document.getElementById('chat-input').focus();
+      }, 50);
+    }
+  }
+
+  function sendChat() {
+    if (!roomCode) return;
+    const input = document.getElementById('chat-input');
+    const text = (input.value || '').trim();
+    if (!text) return;
+    input.value = '';
+    SFX.click();
+    const key = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    set(ref(database, `rooms/${roomCode}/chat/${key}`), {
+      sender: onlineSide,
+      text: text.slice(0, 80),
+      ts: Date.now()
+    }).catch(console.error);
+  }
+
+  function teardownChat() {
+    const panel = document.getElementById('chat-panel');
+    if (panel) panel.classList.add('hidden');
+    if (chatListener && roomCode) {
+      try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
+      chatListener = null;
+    }
+    chatOpen = false;
+    unreadCount = 0;
+  }
+
+  // =========== REMATCH ===========
+  function showRematch(iWon) {
+    rematchVoted = false;
+    const overlay = document.getElementById('rematch-overlay');
+    const icon    = document.getElementById('rematch-icon');
+    const title   = document.getElementById('rematch-title');
+    const sub     = document.getElementById('rematch-sub');
+    const yesBtn  = document.getElementById('btn-rematch-yes');
+    const noBtn   = document.getElementById('btn-rematch-no');
+    const dots    = document.getElementById('rematch-dots');
+
+    icon.textContent  = iWon ? '🏆' : '😤';
+    title.textContent = iWon ? 'You Won!' : 'You Lost!';
+    sub.textContent   = 'Waiting for opponent…';
+    yesBtn.disabled   = false;
+    noBtn.disabled    = false;
+    dots.classList.add('hidden');
+
+    overlay.classList.remove('hidden');
+
+    update(ref(database, `rooms/${roomCode}`), {
+      [`rematch_${onlineSide}`]: null
+    }).catch(console.error);
+
+    rematchListener = onValue(ref(database, `rooms/${roomCode}`), (snap) => {
+      const data = snap.val();
+      if (!data) return;
+      const myVote  = data[`rematch_${onlineSide}`];
+      const oppSide = onlineSide === PLAYER ? PLAYER2 : PLAYER;
+      const oppVote = data[`rematch_${oppSide}`];
+
+      if (myVote === true && oppVote === true) {
+        cleanupRematch();
+        overlay.classList.add('hidden');
+
+        if (onlineSide === PLAYER) {
+          const newSeed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+          update(ref(database, `rooms/${roomCode}`), { rematchSeed: newSeed, rematchSeedSet: true })
+            .catch(console.error);
+          doOnlineRematch(newSeed);
+        } else {
+          // FIX #5: P2 waits for seed — store listener ref so it can be cleaned up
+          if (data.rematchSeed) {
+            doOnlineRematch(data.rematchSeed);
+          } else {
+            let seedWaitOff = null;
+            const seedRef = ref(database, `rooms/${roomCode}/rematchSeed`);
+            seedWaitOff = onValue(seedRef, (seedSnap) => {
+              if (seedSnap.val()) {
+                if (seedWaitOff) { off(seedRef); seedWaitOff = null; }
+                doOnlineRematch(seedSnap.val());
+              }
+            });
+          }
+        }
+      } else if (myVote === false || oppVote === false) {
+        cleanupRematch();
+        overlay.classList.add('hidden');
+        cancelOnline();
+      }
+    });
+
+    rematchTimeout = setTimeout(() => {
       cleanupRematch();
       overlay.classList.add('hidden');
+      appendSystemMsg('Rematch timed out.');
       cancelOnline();
+    }, 30000);
+  }
+
+  function voteRematch(yes) {
+    if (rematchVoted) return;
+    rematchVoted = true;
+    SFX.click();
+
+    const yesBtn = document.getElementById('btn-rematch-yes');
+    const noBtn  = document.getElementById('btn-rematch-no');
+    const sub    = document.getElementById('rematch-sub');
+    const dots   = document.getElementById('rematch-dots');
+
+    yesBtn.disabled = true;
+    noBtn.disabled  = true;
+
+    update(ref(database, `rooms/${roomCode}`), {
+      [`rematch_${onlineSide}`]: yes
+    }).catch(console.error);
+
+    if (yes) {
+      sub.textContent = 'Waiting for opponent…';
+      dots.classList.remove('hidden');
+    } else {
+      sub.textContent = 'Leaving…';
     }
-  });
-
-  // Auto-timeout after 30s
-  rematchTimeout = setTimeout(() => {
-    cleanupRematch();
-    overlay.classList.add('hidden');
-    appendSystemMsg('Rematch timed out.');
-    cancelOnline();
-  }, 30000);
-}
-
-function voteRematch(yes) {
-  if (rematchVoted) return;
-  rematchVoted = true;
-  SFX.click();
-
-  const yesBtn = document.getElementById('btn-rematch-yes');
-  const noBtn  = document.getElementById('btn-rematch-no');
-  const sub    = document.getElementById('rematch-sub');
-  const dots   = document.getElementById('rematch-dots');
-
-  yesBtn.disabled = true;
-  noBtn.disabled  = true;
-
-  update(ref(database, `rooms/${roomCode}`), {
-    [`rematch_${onlineSide}`]: yes
-  }).catch(console.error);
-
-  if (yes) {
-    sub.textContent = 'Waiting for opponent…';
-    dots.classList.remove('hidden');
-  } else {
-    sub.textContent = 'Leaving…';
   }
-}
 
-function cleanupRematch() {
-  if (rematchTimeout) { clearTimeout(rematchTimeout); rematchTimeout = null; }
-  if (rematchListener && roomCode) {
-    try { off(ref(database, `rooms/${roomCode}`)); } catch (e) {}
-    rematchListener = null;
+  function cleanupRematch() {
+    if (rematchTimeout) { clearTimeout(rematchTimeout); rematchTimeout = null; }
+    if (rematchListener && roomCode) {
+      try { off(ref(database, `rooms/${roomCode}`)); } catch (e) {}
+      rematchListener = null;
+    }
+    rematchVoted = false;
   }
-  rematchVoted = false;
-}
 
-function doOnlineRematch(seed) {
-  // Reset rematch flags in Firebase
-  update(ref(database, `rooms/${roomCode}`), {
-    rematch_player: null, rematch_player2: null,
-    rematchSeed: null, rematchSeedSet: null,
-    p1_move: null, p2_move: null,
-    chat: null
-  }).catch(console.error);
+  function doOnlineRematch(seed) {
+    update(ref(database, `rooms/${roomCode}`), {
+      rematch_player: null, rematch_player2: null,
+      rematchSeed: null, rematchSeedSet: null,
+      p1_move: null, p2_move: null,
+      chat: null
+    }).catch(console.error);
 
-  lastSeenMsgId = null;
-  document.getElementById('chat-messages').innerHTML = '';
-  appendSystemMsg('Rematch started!');
+    lastSeenMsgId = null;
+    document.getElementById('chat-messages').innerHTML = '';
+    appendSystemMsg('Rematch started!');
 
-  startOnlineGame(onlineSide === PLAYER, seed);
-  startOnlineMoveListener();
-}
+    startOnlineGame(onlineSide === PLAYER, seed);
+    startOnlineMoveListener();
+  }
 
   function generateMapSeeded(seed) {
     _rngSeed = seed;
@@ -1363,11 +1396,8 @@ function doOnlineRematch(seed) {
     afterOpponentTurn();
   }
 
-  // After the OPPONENT finishes their turn — now it's OUR turn
   function afterOpponentTurn() {
     turn++;
-    // Grow the opponent's hexes (they moved, so they get growth on their own next cycle)
-    // Actually: we grow OUR side since it's now our turn starting
     growPhaseOwner(onlineSide);
     phase = 'select';
     const label = onlineSide === PLAYER ? '🟢 P1' : '🔵 P2';
@@ -1595,7 +1625,6 @@ function doOnlineRematch(seed) {
       render();
       showLocalTurnBanner();
     } else if (gameMode === 'online') {
-      // Grow the opponent's hexes (their turn starts after this)
       growPhaseOwner(opponentOwner());
       turn++;
       phase = 'wait-online';
@@ -1642,7 +1671,7 @@ function doOnlineRematch(seed) {
         flashHex(r, c, 'flash-freeze flash-powerup', 600);
         return `❄ Froze ${froze}`;
       }
-case 'spread': {
+      case 'spread': {
         const neutralNeigh = getNeighbors(r, c).filter(([nr,nc]) => grid[nr][nc].owner === NEUTRAL);
         if (neutralNeigh.length === 0) return '🌀 Spread! (no neutral)';
         const pickIndex = gameMode === 'online' ? seededRand(neutralNeigh.length) : randInt(neutralNeigh.length);
@@ -1655,8 +1684,8 @@ case 'spread': {
         if (sPU) extra = ' → ' + applyPowerup(sPU, nr, nc, owner);
         return '🌀 Spread!' + extra;
       }
-    }   // ← closes switch
-  }     // ← closes applyPowerup function  ← THIS WAS MISSING
+    }
+  }
 
   function flashHex(r, c, cls, dur) {
     const key = `${r},${c}`;
@@ -1787,78 +1816,81 @@ case 'spread': {
     return checkGameOverAI();
   }
 
-function checkGameOverAI() {
-  let hasP = false, hasE = false, pS = 0, eS = 0, hasBoss = false, pH = 0;  // ← ADD pH counter
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    const o = grid[r][c].owner;
-    if (o === PLAYER) { hasP = true; pS += grid[r][c].power; pH++; }      // ← ADD pH++
-    if (o === ENEMY)  { hasE = true; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
-  }
-  
-  if (cfg.isBoss && !hasBoss && hasP) { 
-    awardHexoneX(pH, 0, true);  // ← ADD
-    showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'); 
-    return true; 
-  }
-  if (!hasE) { 
-    awardHexoneX(pH, 0, true);  // ← ADD
-    showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'); 
-    return true; 
-  }
-  if (!hasP) { 
-    awardHexoneX(pH, 0, false);  // ← ADD
-    showEnd('Defeat', `Stage ${currentStage} — enemy took all your hexes.`, 'lose'); 
-    return true; 
-  }
-  if (turn >= cfg.maxTurns) {
-    const won = pS > eS;
-    awardHexoneX(pH, 0, won);    // ← ADD
-    if (won) showEnd('Victory!', `Time's up — you win! ⚡${pS} vs ⚡${eS}`, 'win');
-    else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡${eS} vs ⚡${pS}`, 'lose');
-    else showEnd('Draw', `Tied at ⚡${pS}!`, 'draw');
-    return true;
-  }
-  return false;
-}
-
-function checkGameOverMP() {
-  let p1H=0, p2H=0, p1S=0, p2S=0;
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    const cell = grid[r][c];
-    if (cell.owner === PLAYER)  { p1H++; p1S += cell.power; }
-    if (cell.owner === PLAYER2) { p2H++; p2S += cell.power; }
-  }
-
-  const p1Name = (gameMode === 'online' && onlineSide === PLAYER2) ? 'Opponent' : 'Player 1';
-  const p2Name = (gameMode === 'online' && onlineSide === PLAYER)  ? 'Opponent' : 'Player 2';
-  const myHexes = (gameMode === 'online' && onlineSide === PLAYER) ? p1H : p2H;  // ← ADD
-  const myWin = (p1H === 0 && p2Name === 'Opponent') || (p2H === 0 && p1Name === 'Opponent') ||
-                (turn >= cfg.maxTurns && ((p1S > p2S && p1Name === 'Opponent') || (p2S > p1S && p2Name === 'Opponent')));
-
-  if (p2H === 0) {
-    awardHexoneX(p1H, p2H, p1Name !== 'Opponent');  // ← ADD
-    showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, p1Name === 'Opponent' ? 'lose' : 'win'); 
-    return true;
-  }
-  if (p1H === 0) {
-    awardHexoneX(p2H, p1H, p2Name !== 'Opponent');  // ← ADD  
-    showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, p2Name === 'Opponent' ? 'lose' : 'win'); 
-    return true;
-  }
-  if (turn >= cfg.maxTurns) {
-    const win1 = p1S > p2S;
-    awardHexoneX(win1 ? p1H : p2H, win1 ? p2H : p1H, win1 === (p1Name !== 'Opponent'));  // ← ADD
-    if (p1S > p2S) {
-      showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
-    } else if (p2S > p1S) {
-      showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
-    } else {
-      showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
+  function checkGameOverAI() {
+    let hasP = false, hasE = false, pS = 0, eS = 0, hasBoss = false, pH = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const o = grid[r][c].owner;
+      if (o === PLAYER) { hasP = true; pS += grid[r][c].power; pH++; }
+      if (o === ENEMY)  { hasE = true; eS += grid[r][c].power; if (grid[r][c].boss) hasBoss = true; }
     }
-    return true;
+
+    if (cfg.isBoss && !hasBoss && hasP) {
+      awardHexoneX(pH, 0, true);
+      setTimeout(() => showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'), 800);
+      return true;
+    }
+    if (!hasE) {
+      awardHexoneX(pH, 0, true);
+      setTimeout(() => showEnd('Victory!', `Stage ${currentStage} cleared in ${turn} turns!`, 'win'), 800);
+      return true;
+    }
+    if (!hasP) {
+      awardHexoneX(pH, 0, false);
+      setTimeout(() => showEnd('Defeat', `Stage ${currentStage} — enemy took all your hexes.`, 'lose'), 800);
+      return true;
+    }
+    if (turn >= cfg.maxTurns) {
+      const won = pS > eS;
+      awardHexoneX(pH, 0, won);
+      // FIX #3: Delay showEnd so HexoneX award message is briefly visible
+      setTimeout(() => {
+        if (won) showEnd('Victory!', `Time's up — you win! ⚡${pS} vs ⚡${eS}`, 'win');
+        else if (eS > pS) showEnd('Defeat', `Time's up — enemy wins ⚡${eS} vs ⚡${pS}`, 'lose');
+        else showEnd('Draw', `Tied at ⚡${pS}!`, 'draw');
+      }, 800);
+      return true;
+    }
+    return false;
   }
-  return false;
-}
+
+  function checkGameOverMP() {
+    let p1H=0, p2H=0, p1S=0, p2S=0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      if (cell.owner === PLAYER)  { p1H++; p1S += cell.power; }
+      if (cell.owner === PLAYER2) { p2H++; p2S += cell.power; }
+    }
+
+    const p1Name = (gameMode === 'online' && onlineSide === PLAYER2) ? 'Opponent' : 'Player 1';
+    const p2Name = (gameMode === 'online' && onlineSide === PLAYER)  ? 'Opponent' : 'Player 2';
+    // FIX #4: removed unused myWin variable
+
+    if (p2H === 0) {
+      awardHexoneX(p1H, p2H, p1Name !== 'Opponent');
+      setTimeout(() => showEnd(`${p1Name} Wins!`, `${p1Name} eliminated ${p2Name}!`, p1Name === 'Opponent' ? 'lose' : 'win'), 800);
+      return true;
+    }
+    if (p1H === 0) {
+      awardHexoneX(p2H, p1H, p2Name !== 'Opponent');
+      setTimeout(() => showEnd(`${p2Name} Wins!`, `${p2Name} eliminated ${p1Name}!`, p2Name === 'Opponent' ? 'lose' : 'win'), 800);
+      return true;
+    }
+    if (turn >= cfg.maxTurns) {
+      const win1 = p1S > p2S;
+      awardHexoneX(win1 ? p1H : p2H, win1 ? p2H : p1H, win1 === (p1Name !== 'Opponent'));
+      setTimeout(() => {
+        if (p1S > p2S) {
+          showEnd(`${p1Name} Wins!`, `Time's up! ⚡${p1S} vs ⚡${p2S}`, p1Name === 'Opponent' ? 'lose' : 'win');
+        } else if (p2S > p1S) {
+          showEnd(`${p2Name} Wins!`, `Time's up! ⚡${p2S} vs ⚡${p1S}`, p2Name === 'Opponent' ? 'lose' : 'win');
+        } else {
+          showEnd('Draw!', `Tied at ⚡${p1S}!`, 'draw');
+        }
+      }, 800);
+      return true;
+    }
+    return false;
+  }
 
   function showEnd(title, desc, type) {
     phase = 'gameover';
@@ -1866,42 +1898,41 @@ function checkGameOverMP() {
     resultTitle.className = type;
     resultDesc.textContent = desc;
 
-if (type === 'win') {
-  SFX.victory();
-  if (gameMode === 'ai') stageWon();
-  btnNext.textContent = gameMode === 'ai'
-    ? (currentStage >= TOTAL_STAGES ? '🏆 All Stages!' : 'Next Stage →')
-    : 'Play Again';
-  btnNext.classList.remove('hidden');
-} else if (type === 'draw') {
-  SFX.defeat();
-  btnNext.textContent = 'Play Again';
-  btnNext.classList.remove('hidden');
-} else {
-  SFX.defeat();
-  if (gameMode !== 'ai') {
-    btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
-  } else {
-    btnNext.classList.add('hidden');
-  }
-}
+    if (type === 'win') {
+      SFX.victory();
+      if (gameMode === 'ai') stageWon();
+      btnNext.textContent = gameMode === 'ai'
+        ? (currentStage >= TOTAL_STAGES ? '🏆 All Stages!' : 'Next Stage →')
+        : 'Play Again';
+      btnNext.classList.remove('hidden');
+    } else if (type === 'draw') {
+      SFX.defeat();
+      btnNext.textContent = 'Play Again';
+      btnNext.classList.remove('hidden');
+    } else {
+      SFX.defeat();
+      if (gameMode !== 'ai') {
+        btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
+      } else {
+        btnNext.classList.add('hidden');
+      }
+    }
 
-// For online, replace the game-over overlay with the rematch screen
-if (gameMode === 'online') {
-  goOverlay.classList.add('hidden');
-  const iWon = type === 'win';
-  showRematch(iWon);
-  return;
-}
+    if (gameMode === 'online') {
+      goOverlay.classList.add('hidden');
+      showRematch(type === 'win');
+      return;
+    }
 
-goOverlay.classList.remove('hidden');
-setStatus(title); render();
+    goOverlay.classList.remove('hidden');
+    setStatus(title); render();
   }
 
   function setStatus(msg) { statusEl.textContent = msg; }
 
   // =========== SKIP ATTACK ===========
   function skipAttack() {
+    // FIX #6: Guard wait-online phase — player shouldn't be able to skip during opponent's turn
     if (phase !== 'select' && phase !== 'target') return;
     SFX.click();
     selectedHex = null; validTargets = []; transferTargets = [];
@@ -1919,7 +1950,6 @@ setStatus(title); render();
         phase = 'select'; render();
         showLocalTurnBanner();
       } else if (gameMode === 'online') {
-        // Grow opponent's hexes (their turn is starting)
         growPhaseOwner(opponentOwner());
         turn++;
         phase = 'wait-online';
@@ -1978,6 +2008,7 @@ setStatus(title); render();
     localTurnBanner = document.getElementById('local-turn-banner');
 
     loadProgress();
+    updateShopButton();
     btnSound.textContent = SFX.on ? '🔊' : '🔇';
 
     if (!progress.tutDone) showTutorial();
@@ -1987,16 +2018,19 @@ setStatus(title); render();
   document.addEventListener('DOMContentLoaded', init);
 
   // =========== PUBLIC API ===========
-return {
-  skipAttack, restartStage, nextStage, startBoss,
-  showStages, closeStages, toggleSound,
-  nextTutorial, skipTutorial, replayTutorial,
-  showModeSelect, closeModeSelect, selectMode,
-  onlineCreate, showJoinRoom, onlineJoin,
-  showCreateJoin, cancelOnline, copyRoomCode,
-  dismissLocalBanner,
-  toggleChat, sendChat, voteRematch
-};
+  return {
+    skipAttack, restartStage, nextStage, startBoss,
+    showStages, closeStages, toggleSound,
+    nextTutorial, skipTutorial, replayTutorial,
+    showModeSelect, closeModeSelect, selectMode,
+    onlineCreate, showJoinRoom, onlineJoin,
+    showCreateJoin, cancelOnline, copyRoomCode,
+    dismissLocalBanner,
+    toggleChat, sendChat, voteRematch,
+    // FIX #2: Shop functions now part of public API
+    showShop, closeShop, buySkin, switchTab,
+    updateShopButton
+  };
 })();
 
 window.HexAsteal = HexAsteal;
