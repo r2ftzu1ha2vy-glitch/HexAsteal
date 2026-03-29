@@ -238,6 +238,35 @@
     </div>
   </div>
 </div>
+
+  <!-- ========== CHAT PANEL (online only) ========== -->
+<div id="chat-panel" class="chat-panel hidden">
+  <div id="chat-header" class="chat-header" onclick="HexAsteal.toggleChat()">
+    💬 Chat <span id="chat-unread" class="chat-unread hidden">0</span>
+  </div>
+  <div id="chat-body" class="chat-body">
+    <div id="chat-messages" class="chat-messages"></div>
+    <div class="chat-input-row">
+      <input id="chat-input" class="chat-input" maxlength="80" placeholder="Say something…" autocomplete="off"/>
+      <button class="chat-send-btn" onclick="HexAsteal.sendChat()">➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== REMATCH OVERLAY ========== -->
+<div id="rematch-overlay" class="overlay-screen hidden">
+  <div class="overlay-card rematch-card">
+    <div id="rematch-icon" class="rematch-icon">🔄</div>
+    <h2 id="rematch-title">Rematch?</h2>
+    <p id="rematch-sub">Waiting for opponent…</p>
+    <div class="rematch-btns">
+      <button class="btn-primary" id="btn-rematch-yes" onclick="HexAsteal.voteRematch(true)">✅ Rematch</button>
+      <button class="btn-ghost"   id="btn-rematch-no"  onclick="HexAsteal.voteRematch(false)">❌ Leave</button>
+    </div>
+    <div id="rematch-dots" class="waiting-dots hidden"><span></span><span></span><span></span></div>
+  </div>
+</div>
+
   
   <!-- Local 2P turn banner -->
   <div id="local-turn-banner" class="overlay-screen hidden">
