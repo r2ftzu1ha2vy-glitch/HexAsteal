@@ -1,5 +1,5 @@
 /* ===========================================
-   HEXASTEAL — Styles (Stages + Boss + Tutorial + Multiplayer)
+   HEXASTEAL — Styles (Stages + Boss + Tutorial + Multiplayer + Shop)
    =========================================== */
 
 /* ---- Reset & Base ---- */
@@ -23,7 +23,7 @@ body {
 /* ---- HUD ---- */
 #hud {
   display: flex; justify-content: center; align-items: center;
-  gap: 12px; padding: 8px 12px;
+  gap: 10px; padding: 6px 10px;
   background: #111120; border-bottom: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0; flex-wrap: wrap;
 }
@@ -59,12 +59,16 @@ body {
   50% { transform: scale(1.2); }
 }
 
-#btn-sound {
-  background: none; border: none; font-size: 16px;
-  cursor: pointer; padding: 4px; opacity: 0.6;
-  transition: opacity 0.15s;
+/* ---- HUD icon buttons ---- */
+#btn-sound, .hud-shop-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px; font-size: 13px;
+  cursor: pointer; padding: 4px 8px; opacity: 0.7;
+  color: #d1d5db; font-weight: 600;
+  transition: opacity 0.15s, background 0.15s;
+  white-space: nowrap;
 }
-#btn-sound:hover { opacity: 1; }
+#btn-sound:hover, .hud-shop-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
 
 /* ---- Mode indicator in HUD ---- */
 .mode-pill {
@@ -123,7 +127,6 @@ body {
 /* ---- Player 2 color (local multiplayer) ---- */
 .hex-player2  { fill: #172554; stroke: #3b82f6; stroke-width: 1.5; }
 .player2-dot  { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.5); }
-.player-section.p2 .value { color: #60a5fa; }
 
 /* ---- Boss Hex ---- */
 .hex-boss {
@@ -280,7 +283,9 @@ body {
   background: rgba(0,0,0,0.85);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center;
-  z-index: 100; animation: fadeIn 0.3s ease;
+  /* FIX: shop overlay must be above game overlays */
+  z-index: 200;
+  animation: fadeIn 0.3s ease;
 }
 .overlay-screen.hidden { display: none; }
 
@@ -290,6 +295,7 @@ body {
   background: #16162a; border: 1px solid rgba(255,255,255,0.08);
   border-radius: 14px; padding: 28px 32px; text-align: center;
   max-width: 360px; width: 90%; animation: popIn 0.3s ease;
+  max-height: 90vh; overflow-y: auto;
 }
 @keyframes popIn {
   from { transform: scale(0.9); opacity: 0; }
@@ -392,9 +398,7 @@ body {
 }
 .stage-cell:hover:not(.locked) { border-color: #4b5563; transform: scale(1.05); }
 
-.stage-cell.completed {
-  background: #052e16; border-color: #22c55e; color: #4ade80;
-}
+.stage-cell.completed { background: #052e16; border-color: #22c55e; color: #4ade80; }
 .stage-cell.current {
   background: #1e1040; border-color: #c084fc; color: #e9d5ff;
   animation: current-pulse 2s ease-in-out infinite;
@@ -404,16 +408,10 @@ body {
   50% { box-shadow: 0 0 12px 2px rgba(192,132,252,0.4); }
 }
 
-.stage-cell.locked {
-  opacity: 0.3; cursor: not-allowed; border-color: #1e1e30;
-}
+.stage-cell.locked { opacity: 0.3; cursor: not-allowed; border-color: #1e1e30; }
 
-.stage-cell.boss-stage {
-  border-color: #991b1b; background: #1a0a0a; color: #f87171;
-}
-.stage-cell.boss-stage.completed {
-  border-color: #22c55e; background: #0a1a0a;
-}
+.stage-cell.boss-stage { border-color: #991b1b; background: #1a0a0a; color: #f87171; }
+.stage-cell.boss-stage.completed { border-color: #22c55e; background: #0a1a0a; }
 .stage-cell.boss-stage.current {
   border-color: #ff3333; background: #2a0a0a; color: #fca5a5;
   animation: boss-current-pulse 1.5s ease-in-out infinite;
@@ -434,9 +432,7 @@ body {
 .overlay-card h2.lose { color: #f87171; text-shadow: 0 0 20px rgba(248,113,113,0.3); }
 .overlay-card h2.draw { color: #fbbf24; text-shadow: 0 0 20px rgba(251,191,36,0.3); }
 
-.overlay-card p {
-  font-size: 13px; color: #9ca3af; margin-bottom: 20px; line-height: 1.5;
-}
+.overlay-card p { font-size: 13px; color: #9ca3af; margin-bottom: 20px; line-height: 1.5; }
 .result-btns { display: flex; gap: 10px; justify-content: center; }
 #btn-next.hidden { display: none; }
 
@@ -444,14 +440,11 @@ body {
    MULTIPLAYER STYLES
    ========================================= */
 
-/* ---- Mode Select ---- */
 .mode-card { max-width: 380px; padding: 28px 24px; }
 .mode-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 4px; color: #f3f4f6; }
 .mode-sub { font-size: 12px; color: #6b7280; margin-bottom: 18px; }
 
-.mode-grid {
-  display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;
-}
+.mode-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
 
 .mode-btn {
   display: flex; align-items: center; gap: 14px;
@@ -475,10 +468,7 @@ body {
 .online-btns .btn-primary,
 .online-btns .btn-ghost { flex: 1; min-width: 110px; }
 
-/* 4-digit code inputs */
-.code-inputs {
-  display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px;
-}
+.code-inputs { display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px; }
 .code-digit {
   width: 54px; height: 64px;
   background: #0e0e1c; border: 2px solid rgba(56,189,248,0.3);
@@ -493,7 +483,6 @@ body {
 }
 .code-digit::placeholder { color: #374151; }
 
-/* Room code display */
 .room-code-display {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   flex-direction: column; margin: 16px 0 8px;
@@ -514,7 +503,6 @@ body {
 }
 .copy-btn:hover { background: rgba(56,189,248,0.1); }
 
-/* Waiting dots animation */
 .waiting-dots {
   display: flex; gap: 6px; justify-content: center; margin: 12px 0 4px;
 }
@@ -541,34 +529,25 @@ body {
 .local-banner-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 6px; color: #f3f4f6; }
 .local-banner-card p { font-size: 13px; color: #9ca3af; margin-bottom: 20px; }
 
-/* Local P2 turn glow on board */
 #board.p2-turn {
   background: radial-gradient(ellipse at center, #0a0f1f 0%, #0a0a14 100%);
 }
 
-/* Online turn indicator */
-.online-my-turn { color: #4ade80 !important; }
-.online-their-turn { color: #f87171 !important; }
-
-/* Connection status badge */
 .conn-badge {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 9px; font-weight: 700; padding: 2px 6px;
   border-radius: 20px; text-transform: uppercase; letter-spacing: 0.6px;
 }
-.conn-online { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-.conn-online::before { content: '●'; font-size: 7px; }
-.conn-offline { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-.conn-offline::before { content: '●'; font-size: 7px; }
+.conn-online  { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+.conn-offline { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
 .conn-waiting { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
-.conn-waiting::before { content: '●'; font-size: 7px; }
+.conn-online::before, .conn-offline::before, .conn-waiting::before { content: '●'; font-size: 7px; }
 
 /* =========================================
    CHAT PANEL
    ========================================= */
 .chat-panel {
-  position: fixed;
-  bottom: 0; right: 0;
+  position: fixed; bottom: 0; right: 0;
   width: 260px;
   background: #16162a;
   border: 1px solid rgba(56,189,248,0.2);
@@ -601,10 +580,7 @@ body {
 }
 .chat-unread.hidden { display: none; }
 
-.chat-body {
-  display: flex; flex-direction: column;
-  height: 200px;
-}
+.chat-body { display: flex; flex-direction: column; height: 200px; }
 
 .chat-messages {
   flex: 1; overflow-y: auto;
@@ -617,62 +593,30 @@ body {
 .chat-messages::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
 
 .chat-msg {
-  max-width: 90%;
-  padding: 5px 9px;
-  border-radius: 10px;
-  font-size: 12px; line-height: 1.4;
-  word-break: break-word;
-  animation: popIn 0.15s ease;
+  max-width: 90%; padding: 5px 9px;
+  border-radius: 10px; font-size: 12px; line-height: 1.4;
+  word-break: break-word; animation: popIn 0.15s ease;
 }
-.chat-msg-me {
-  align-self: flex-end;
-  background: #0c2e1f;
-  border: 1px solid rgba(34,197,94,0.25);
-  color: #d1fae5;
-}
-.chat-msg-them {
-  align-self: flex-start;
-  background: #0c1a2e;
-  border: 1px solid rgba(56,189,248,0.25);
-  color: #bae6fd;
-}
-.chat-msg-system {
-  align-self: center;
-  background: transparent;
-  color: #4b5563;
-  font-size: 10px; font-style: italic;
-  border: none; padding: 2px 0;
-}
-.chat-msg-name {
-  font-size: 9px; font-weight: 700;
-  color: #6b7280;
-  margin-bottom: 2px;
-}
+.chat-msg-me   { align-self: flex-end; background: #0c2e1f; border: 1px solid rgba(34,197,94,0.25); color: #d1fae5; }
+.chat-msg-them { align-self: flex-start; background: #0c1a2e; border: 1px solid rgba(56,189,248,0.25); color: #bae6fd; }
+.chat-msg-system { align-self: center; background: transparent; color: #4b5563; font-size: 10px; font-style: italic; border: none; padding: 2px 0; }
+.chat-msg-name { font-size: 9px; font-weight: 700; color: #6b7280; margin-bottom: 2px; }
 
 .chat-input-row {
-  display: flex; gap: 6px;
-  padding: 7px 8px;
+  display: flex; gap: 6px; padding: 7px 8px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
-
 .chat-input {
-  flex: 1;
-  background: #0e0e1c; border: 1px solid rgba(56,189,248,0.2);
-  border-radius: 8px; color: #e5e7eb;
-  font-size: 12px; padding: 6px 10px;
-  outline: none;
-  transition: border-color 0.15s;
+  flex: 1; background: #0e0e1c; border: 1px solid rgba(56,189,248,0.2);
+  border-radius: 8px; color: #e5e7eb; font-size: 12px; padding: 6px 10px;
+  outline: none; transition: border-color 0.15s;
 }
 .chat-input:focus { border-color: #38bdf8; }
 .chat-input::placeholder { color: #374151; }
-
 .chat-send-btn {
-  background: #0c2e1f;
-  border: 1px solid rgba(34,197,94,0.3);
-  border-radius: 8px; color: #4ade80;
-  font-size: 14px; padding: 6px 10px;
-  cursor: pointer; transition: all 0.15s;
-  flex-shrink: 0;
+  background: #0c2e1f; border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 8px; color: #4ade80; font-size: 14px; padding: 6px 10px;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
 }
 .chat-send-btn:hover { background: #134e2a; }
 .chat-send-btn:active { transform: scale(0.95); }
@@ -680,32 +624,111 @@ body {
 /* =========================================
    REMATCH OVERLAY
    ========================================= */
-.rematch-card {
-  max-width: 300px;
-  padding: 32px 28px;
+.rematch-card { max-width: 300px; padding: 32px 28px; }
+.rematch-icon { font-size: 44px; margin-bottom: 12px; animation: boss-badge-pulse 1.5s ease-in-out infinite; }
+.rematch-card h2 { font-size: 24px; font-weight: 900; color: #f3f4f6; margin-bottom: 6px; }
+.rematch-card p { font-size: 13px; color: #9ca3af; margin-bottom: 20px; }
+.rematch-btns { display: flex; gap: 10px; justify-content: center; margin-bottom: 14px; }
+
+/* =========================================
+   SHOP
+   ========================================= */
+.shop-card {
+  max-width: 440px; padding: 24px 20px;
+  text-align: left;
 }
-.rematch-icon {
-  font-size: 44px; margin-bottom: 12px;
-  animation: boss-badge-pulse 1.5s ease-in-out infinite;
+.shop-card h2 {
+  font-size: 20px; font-weight: 900; color: #f3f4f6;
+  margin-bottom: 10px; text-align: center;
+  /* Override generic overlay-card h2 sizing */
+  letter-spacing: 0;
 }
-.rematch-card h2 {
-  font-size: 24px; font-weight: 900;
-  color: #f3f4f6; margin-bottom: 6px;
+
+/* Balance display */
+.hexonex-balance {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2);
+  border-radius: 8px; padding: 8px 14px; margin-bottom: 16px;
+  font-size: 13px; color: #9ca3af;
 }
-.rematch-card p {
-  font-size: 13px; color: #9ca3af; margin-bottom: 20px;
+.balance-amount {
+  font-size: 20px; font-weight: 900; color: #fbbf24;
 }
-.rematch-btns {
-  display: flex; gap: 10px; justify-content: center;
-  margin-bottom: 14px;
+
+/* Tab buttons — FIX: was rendering white text on near-white bg */
+.shop-tabs {
+  display: flex; gap: 6px; margin-bottom: 14px;
 }
-.shop-card { max-width: 420px; padding: 24px; text-align: left; }
-.shop-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-.tab-btn { flex: 1; padding: 8px; background: #1a1a2e; border: 1px solid #374151; border-radius: 6px; cursor: pointer; }
-.tab-btn.active { background: #c084fc; color: white; border-color: #a855f7; }
-.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; max-height: 400px; overflow-y: auto; }
-.skin-item { display: flex; gap: 12px; align-items: center; padding: 12px; background: #1a1a2e; border-radius: 8px; border: 2px solid transparent; }
-.skin-item.owned { border-color: #4ade80; }
-.skin-item.equipped { border-color: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,0.3); }
-.skin-preview { width: 50px; height: 50px; border-radius: 8px; flex-shrink: 0; }
-button { padding: 6px 12px; background: #22c55e; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 11px; }
+.tab-btn {
+  flex: 1; padding: 8px 6px;
+  background: #1a1a2e; border: 1px solid #2a2a40;
+  border-radius: 8px; cursor: pointer;
+  font-size: 11px; font-weight: 700;
+  color: #6b7280;           /* visible default text */
+  transition: all 0.15s;
+}
+.tab-btn:hover { background: #22223a; color: #9ca3af; border-color: #374151; }
+.tab-btn.active {
+  background: rgba(192,132,252,0.15);
+  border-color: #c084fc;
+  color: #e9d5ff;           /* light purple text on dark bg */
+}
+
+/* Shop grid */
+.shop-grid {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 280px; overflow-y: auto;
+  padding-right: 4px; margin-bottom: 4px;
+}
+.shop-grid::-webkit-scrollbar { width: 4px; }
+.shop-grid::-webkit-scrollbar-track { background: transparent; }
+.shop-grid::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+
+/* Skin item row */
+.skin-item {
+  display: flex; gap: 10px; align-items: center;
+  padding: 10px 12px; background: #1a1a2e;
+  border-radius: 10px; border: 2px solid transparent;
+  transition: border-color 0.15s;
+}
+.skin-item:hover { border-color: #2a2a50; }
+.skin-item.owned { border-color: rgba(74,222,128,0.3); }
+.skin-item.equipped {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(251,191,36,0.15);
+}
+
+.skin-preview {
+  width: 44px; height: 44px; border-radius: 8px;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+}
+
+/* FIX: shop action button (buy/equip) — distinct from global button reset */
+.shop-action-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(34,197,94,0.4);
+  border-radius: 6px;
+  background: rgba(34,197,94,0.1);
+  color: #4ade80;
+  font-size: 11px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+  white-space: nowrap; flex-shrink: 0;
+}
+.shop-action-btn:hover {
+  background: rgba(34,197,94,0.2);
+  border-color: #22c55e;
+}
+.skin-item.owned .shop-action-btn {
+  border-color: rgba(192,132,252,0.4);
+  background: rgba(192,132,252,0.1);
+  color: #c084fc;
+}
+.skin-item.owned .shop-action-btn:hover {
+  background: rgba(192,132,252,0.2);
+}
+.skin-item.equipped .shop-action-btn {
+  border-color: rgba(251,191,36,0.5);
+  background: rgba(251,191,36,0.1);
+  color: #fbbf24;
+  cursor: default;
+}
