@@ -77,7 +77,6 @@ document.getElementById('refresh-no').onclick = () => {
   sessionStorage.removeItem('lastOnlineSide');
 };;
 };
-}
 
 function rejoinRoom() {
   if (!roomCode) return;
