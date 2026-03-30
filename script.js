@@ -1273,51 +1273,6 @@ function onlineJoin() {
   });
 }
 
-    document.getElementById('online-join-form').classList.add('hidden');
-    const connectingEl = document.getElementById('online-connecting');
-    connectingEl.classList.remove('hidden');
-    connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
-    document.getElementById('online-back-btn').style.display = 'none';
-
-    roomCode = code;
-    onlineSide = PLAYER2;
-    dbRef = ref(database, `rooms/${code}`);
-
-    const joinTimeout = setTimeout(() => {
-      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found or expired.</p>`;
-      document.getElementById('online-back-btn').style.display = '';
-    }, 12000);
-
-    // FIX: roomListener properly closed and not used as a scope for function definitions
-    roomListener = onValue(dbRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        clearTimeout(joinTimeout);
-        connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found.</p>`;
-        document.getElementById('online-back-btn').style.display = '';
-        return;
-      }
-      clearTimeout(joinTimeout);
-
-      if (data.status === 'waiting') {
-        onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
-        update(dbRef, { status: 'joined' }).catch(console.error);
-        connectingEl.innerHTML =
-          `<p class="mode-sub">Joined! Waiting for host to start…</p>
-           <div class="room-settings-summary">${roomSettingsSummary(onlineRoomSettings)}</div>
-           <div class="waiting-dots"><span></span><span></span><span></span></div>`;
-      }
-
-      if (data.status === 'started') {
-        onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
-        cleanupListeners();
-        onlineOverlay.classList.add('hidden');
-        startOnlineGame(false, data.seed, onlineRoomSettings);
-        startOnlineMoveListener();
-      }
-    });
-  }
-
 // =========== UTILITY FUNCTIONS (move outside IIFE) ===========
 function sanitizeRoomSettings(raw) {
   const pups = parseInt(raw && raw.pups, 10);
