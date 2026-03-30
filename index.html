@@ -41,6 +41,8 @@
       <!-- FIX: Shop button is now INSIDE #hud, uses HexAsteal.showShop() -->
       <button id="btn-shop" class="hud-shop-btn" onclick="HexAsteal.showShop()" title="Open Shop">𖠩 0</button>
       <button id="btn-sound" onclick="HexAsteal.toggleSound()" title="Toggle Sound">🕪</button>
+
+      <button id="btn-leave-online" class="hud-shop-btn hidden" onclick="HexAsteal.leaveOnlineGame()" title="Leave Match">✖ Leave</button>
     </header>
 
     <!-- Power-up Legend -->
@@ -58,6 +60,30 @@
       <svg id="grid" preserveAspectRatio="xMidYMid meet"></svg>
     </main>
 
+<div style="display: none;">
+  <!-- SVG Symbols for game icons -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+    <symbol id="icon-boss" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12,2L15,8H9L12,2Z M12,22L9,16H15L12,22Z M2,12L8,9V15L2,12Z M22,12L16,15V9L22,12Z"/>
+    </symbol>
+    <symbol id="icon-powerup" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
+    </symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1Z"/>
+    </symbol>
+    <symbol id="icon-transfer" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M16,10H22L18,6L14,10H19V14H5V10H8L12,14L16,10Z M4,14H8V18H16V14H20V18H4V14Z"/>
+    </symbol>
+    <symbol id="icon-attack" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M21,16H3L12,7L21,16Z"/>
+    </symbol>
+    <symbol id="icon-skip" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M6,18L18,6M6,6L18,18" stroke="currentColor" stroke-width="2"/>
+    </symbol>
+  </svg>
+</div>
+    
     <!-- Controls -->
     <footer id="controls">
       <div id="status">Select one of your hexes to attack from</div>
