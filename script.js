@@ -75,7 +75,7 @@ document.getElementById('refresh-no').onclick = () => {
   // Clear session storage
   sessionStorage.removeItem('lastRoomCode');
   sessionStorage.removeItem('lastOnlineSide');
-};;
+};
 };
 
 function rejoinRoom() {
@@ -1520,25 +1520,6 @@ function cleanupAllOnline() {
   
   // UPDATE: Call updateOnlineUI when cleaning up online session
   updateOnlineUI();
-}
-function updateOnlineUI() {
-  const leaveBtn = document.getElementById('btn-leave-online');
-  if (leaveBtn) {
-    if (gameMode === 'online') {
-      leaveBtn.classList.remove('hidden');
-    } else {
-      leaveBtn.classList.add('hidden');
-    }
-  }  
-  const onlineStatus = document.getElementById('online-status');
-  if (onlineStatus) {
-    if (gameMode === 'online' && roomCode) {
-      onlineStatus.textContent = `Room: ${roomCode}`;
-      onlineStatus.classList.remove('hidden');
-    } else {
-      onlineStatus.classList.add('hidden');
-    }
-  }
 }
 
   // =========== CHAT ===========
