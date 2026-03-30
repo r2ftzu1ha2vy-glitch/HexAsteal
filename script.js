@@ -385,7 +385,7 @@ const HexAsteal = (function () {
     const cosmeticsEl = document.getElementById('shop-cosmetics');
     if (cosmeticsEl) cosmeticsEl.innerHTML = SKINS.cosmetics.map(skin => `
       <div class="skin-item ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:22px;">${skin.id === 'horns' ? '😈' : skin.id === 'halo' ? '😇' : skin.id === 'crown' ? '👑' : '—'}</div>
+        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:22px;">${skin.id === 'horns' ? '𓄋' : skin.id === 'halo' ? '⬭' : skin.id === 'crown' ? '🜲' : '—'}</div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
           <small style="color:#fbbf24">${skin.price} HexoneX</small>
