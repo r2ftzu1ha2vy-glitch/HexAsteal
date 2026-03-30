@@ -620,29 +620,44 @@ else cls += ` hex-${shownOwner}`;
         if (cell.frozen) cls += ' hex-frozen';
 
         if (selectedHex && selectedHex[0] === r && selectedHex[1] === c) {
-          cls += ' hex-selected';
-          if (ao === PLAYER2) cls += ' p2-selected';
-        } else if (isValidTarget(r, c)) cls += ' hex-valid-target';
-        else if (isTransferTarget(r, c)) cls += ' hex-transfer-target';
-        else if (phase === 'select' && cell.owner === ao && !cell.frozen &&
-          (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0)) {
-          cls += ' hex-selectable';
-          if (ao === PLAYER2) cls += ' p2-selectable';
-        }
+  cls += ' hex-selected';
+  if (gameMode === 'local' && ao === PLAYER2) cls += ' p2-selected';
+} else if (isValidTarget(r, c)) cls += ' hex-valid-target';
+else if (isTransferTarget(r, c)) cls += ' hex-transfer-target';
+else if (phase === 'select' && cell.owner === ao && !cell.frozen &&
+  (getAttackTargets(r, c).length > 0 || getTransferTargets(r, c).length > 0)) {
+  cls += ' hex-selectable';
+  if (gameMode === 'local' && ao === PLAYER2) cls += ' p2-selectable';
+}
+
 
         el.polygon.setAttribute('class', cls);
 
         // Apply equipped color skin to player hexes
-        if (cls.includes('hex-player') && !cls.includes('hex-player2')) {
-          const colorSkin = SKINS.colors.find(s => s.id === progress.equippedSkins.color);
-          if (colorSkin) {
-            el.polygon.style.fill = colorSkin.fill;
-            el.polygon.style.stroke = colorSkin.stroke;
-          }
-        } else {
-          el.polygon.style.fill = '';
-          el.polygon.style.stroke = '';
-        }
+        if (isViewerOwned(cell.owner)) {
+  const colorSkin = getEquippedColorSkin();
+  el.polygon.style.fill = colorSkin.fill;
+  el.polygon.style.stroke = colorSkin.stroke;
+
+  const patternId = getDesignPatternId();
+  el.designOverlay.style.fill = patternId ? `url(#${patternId})` : 'none';
+
+  const cosmetic = getCosmeticMeta();
+  if (cosmetic) {
+    el.cosmeticIcon.textContent = cosmetic.text;
+    el.cosmeticIcon.setAttribute('class', cosmetic.cls);
+  } else {
+    el.cosmeticIcon.textContent = '';
+    el.cosmeticIcon.setAttribute('class', 'hex-cosmetic');
+  }
+} else {
+  el.polygon.style.fill = '';
+  el.polygon.style.stroke = '';
+  el.designOverlay.style.fill = 'none';
+  el.cosmeticIcon.textContent = '';
+  el.cosmeticIcon.setAttribute('class', 'hex-cosmetic');
+}
+
 
         el.text.textContent = cell.power;
 
@@ -678,43 +693,67 @@ else cls += ` hex-${shownOwner}`;
   function isValidTarget(r, c)    { return validTargets.some(([vr,vc]) => vr===r && vc===c); }
   function isTransferTarget(r, c) { return transferTargets.some(([vr,vc]) => vr===r && vc===c); }
 
-  function updateHUD() {
-    let pH = 0, pP = 0, eH = 0, eP = 0;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const cell = grid[r][c];
+function updateHUD() {
+  let pH = 0, pP = 0, eH = 0, eP = 0;
+  const oppOnline = onlineOpponentSide();
+
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const cell = grid[r][c];
+    if (gameMode === 'online') {
+      if (cell.owner === onlineSide) { pH++; pP += cell.power; }
+      else if (cell.owner === oppOnline) { eH++; eP += cell.power; }
+    } else {
       if (cell.owner === PLAYER) { pH++; pP += cell.power; }
       if (cell.owner === ENEMY || cell.owner === PLAYER2) { eH++; eP += cell.power; }
     }
-    turnEl.textContent = turn;
-    turnMaxEl.textContent = '/ ' + cfg.maxTurns;
-    stageNumEl.textContent = gameMode === 'ai' ? currentStage : (gameMode === 'local' ? 'L2P' : 'NET');
-    pHexesEl.textContent = pH; pPowerEl.textContent = pP;
-    eHexesEl.textContent = eH; ePowerEl.textContent = eP;
-
-    if (gameMode === 'local') {
-      pLabel.textContent = 'P1';
-      foeLabel.textContent = 'P2';
-      enemyDot.className = 'color-dot player2-dot';
-    } else if (gameMode === 'online') {
-      pLabel.textContent = onlineSide === PLAYER ? 'YOU' : 'OPP';
-      foeLabel.textContent = onlineSide === PLAYER ? 'OPP' : 'YOU';
-      enemyDot.className = 'color-dot player2-dot';
-    } else {
-      pLabel.textContent = 'YOU';
-      foeLabel.textContent = cfg.isBoss ? (cfg.bossName || 'BOSS') : 'FOE';
-      enemyDot.className = 'color-dot enemy-dot';
-    }
-
-    if (cfg.isBoss && gameMode === 'ai') {
-      bossBadge.classList.remove('hidden');
-      boardEl.classList.add('boss-mode');
-    } else {
-      bossBadge.classList.add('hidden');
-      boardEl.classList.remove('boss-mode');
-    }
-
-    updateShopButton();
   }
+
+  turnEl.textContent = turn;
+  turnMaxEl.textContent = '/ ' + cfg.maxTurns;
+  stageNumEl.textContent = gameMode === 'ai' ? currentStage : (gameMode === 'local' ? 'L2P' : 'NET');
+  pHexesEl.textContent = pH;
+  pPowerEl.textContent = pP;
+  eHexesEl.textContent = eH;
+  ePowerEl.textContent = eP;
+
+  const colorSkin = getEquippedColorSkin();
+  playerDot.className = 'color-dot';
+  playerDot.style.background = colorSkin.stroke;
+  playerDot.style.boxShadow = `0 0 6px ${colorSkin.stroke}88`;
+
+  if (gameMode === 'local') {
+    pLabel.textContent = 'P1';
+    foeLabel.textContent = 'P2';
+    enemyDot.className = 'color-dot player2-dot';
+    enemyDot.style.background = '';
+    enemyDot.style.boxShadow = '';
+    applyBoardTheme(cfg.background || 'original');
+  } else if (gameMode === 'online') {
+    pLabel.textContent = 'YOU';
+    foeLabel.textContent = 'OPP';
+    enemyDot.className = 'color-dot enemy-dot';
+    enemyDot.style.background = '';
+    enemyDot.style.boxShadow = '';
+    applyBoardTheme(cfg.background || 'original');
+  } else {
+    pLabel.textContent = 'YOU';
+    foeLabel.textContent = cfg.isBoss ? (cfg.bossName || 'BOSS') : 'FOE';
+    enemyDot.className = 'color-dot enemy-dot';
+    enemyDot.style.background = '';
+    enemyDot.style.boxShadow = '';
+    applyBoardTheme('original');
+  }
+
+  if (cfg.isBoss && gameMode === 'ai') {
+    bossBadge.classList.remove('hidden');
+    boardEl.classList.add('boss-mode');
+  } else {
+    bossBadge.classList.add('hidden');
+    boardEl.classList.remove('boss-mode');
+  }
+
+  updateShopButton();
+}
 
   // =========== TUTORIAL ===========
   function showTutorial() {
@@ -889,42 +928,57 @@ else cls += ` hex-${shownOwner}`;
     }
   }
 
-  function onlineCreate() {
-    SFX.click();
-    document.getElementById('online-create-join').classList.add('hidden');
-    document.getElementById('online-waiting').classList.remove('hidden');
-    document.getElementById('online-back-btn').style.display = 'none';
+  function getOnlineRoomSettings() {
+  return sanitizeRoomSettings({
+    pups: document.getElementById('room-powerups')?.value,
+    startHexes: document.getElementById('room-start-hexes')?.value,
+    background: document.getElementById('room-background')?.value
+  });
+}
 
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    roomCode = code;
-    onlineSide = PLAYER;
+function onlineCreate() {
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-waiting').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = 'none';
 
-    document.getElementById('room-code-big').textContent = code;
-    document.getElementById('waiting-text').textContent = 'Waiting for opponent to join…';
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  roomCode = code;
+  onlineSide = PLAYER;
+  onlineRoomSettings = getOnlineRoomSettings();
 
-    const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+  document.getElementById('room-code-big').textContent = code;
+  document.getElementById('waiting-text').innerHTML =
+    `Waiting for opponent to join…<div class="room-settings-summary">${roomSettingsSummary(onlineRoomSettings)}</div>`;
 
-    dbRef = ref(database, `rooms/${code}`);
-    set(dbRef, { status: 'waiting', seed, createdAt: Date.now() })
-      .catch(err => {
-        console.error('Create room error:', err);
-        setOnlineStatus('Failed to create room. Check connection.', 'error');
-      });
+  const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
 
-    const statusRef = ref(database, `rooms/${code}/status`);
-    statusListener = onValue(statusRef, (snapshot) => {
-      if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
-        update(dbRef, { status: 'started' }).catch(console.error);
-        document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
-        setTimeout(() => {
-          cleanupListeners();
-          onlineOverlay.classList.add('hidden');
-          startOnlineGame(true, seed);
-          startOnlineMoveListener();
-        }, 700);
-      }
-    });
-  }
+  dbRef = ref(database, `rooms/${code}`);
+  set(dbRef, {
+    status: 'waiting',
+    seed,
+    settings: onlineRoomSettings,
+    createdAt: Date.now()
+  }).catch(err => {
+    console.error('Create room error:', err);
+    setOnlineStatus('Failed to create room. Check connection.', 'error');
+  });
+
+  const statusRef = ref(database, `rooms/${code}/status`);
+  statusListener = onValue(statusRef, (snapshot) => {
+    if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
+      update(dbRef, { status: 'started' }).catch(console.error);
+      document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+
+      setTimeout(() => {
+        cleanupListeners();
+        onlineOverlay.classList.add('hidden');
+        startOnlineGame(true, seed, onlineRoomSettings);
+        startOnlineMoveListener();
+      }, 700);
+    }
+  });
+}
 
   function onlineJoin() {
     SFX.click();
@@ -960,19 +1014,22 @@ else cls += ` hex-${shownOwner}`;
       }
       clearTimeout(joinTimeout);
 
-      if (data.status === 'waiting') {
-        update(dbRef, { status: 'joined' }).catch(console.error);
-        connectingEl.innerHTML = `<p class="mode-sub">Joined! Waiting for host to start…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
-      }
+if (data.status === 'waiting') {
+  onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
+  update(dbRef, { status: 'joined' }).catch(console.error);
+  connectingEl.innerHTML =
+    `<p class="mode-sub">Joined! Waiting for host to start…</p>
+     <div class="room-settings-summary">${roomSettingsSummary(onlineRoomSettings)}</div>
+     <div class="waiting-dots"><span></span><span></span><span></span></div>`;
+}
 
-      if (data.status === 'started') {
-        cleanupListeners();
-        onlineOverlay.classList.add('hidden');
-        startOnlineGame(false, data.seed);
-        startOnlineMoveListener();
-      }
-    });
-  }
+if (data.status === 'started') {
+  onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
+  cleanupListeners();
+  onlineOverlay.classList.add('hidden');
+  startOnlineGame(false, data.seed, onlineRoomSettings);
+  startOnlineMoveListener();
+}
 
   function startOnlineMoveListener() {
     if (!roomCode) return;
@@ -1060,9 +1117,10 @@ else cls += ` hex-${shownOwner}`;
     return Math.abs(_rngSeed) % n;
   }
 
-  function startOnlineGame(isHost, seed) {
-    gameMode = 'online';
-    cfg = mpConfig();
+function startOnlineGame(isHost, seed, roomSettings = onlineRoomSettings) {
+  gameMode = 'online';
+  onlineRoomSettings = sanitizeRoomSettings(roomSettings || {});
+  cfg = mpConfig(onlineRoomSettings);
     hideAllOverlays();
     turn = 1;
     phase = 'select';
@@ -1377,7 +1435,7 @@ else cls += ` hex-${shownOwner}`;
         dst.owner = src.owner; dst.power = Math.min(aPow - dPow, MAX_POWER);
         src.power = 1; dst.powerup = null; dst.shielded = false;
         dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
-        flashHex(move.dr, move.dc, onlineSide === PLAYER ? 'flash-ai-capture' : 'flash-capture', 550);
+        flashHex(move.dr, move.dc, 'flash-ai-capture', 550);
         SFX.attack();
         if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
         setStatus(`⚔️ Opponent captured! (${aPow} vs ${dPow})`);
@@ -1981,6 +2039,7 @@ else cls += ` hex-${shownOwner}`;
     ePowerEl      = document.getElementById('e-power');
     foeLabel      = document.getElementById('foe-label');
     pLabel        = document.getElementById('p-label');
+    playerDot = document.getElementById('player-dot');
     btnSkip       = document.getElementById('btn-skip');
     btnSound      = document.getElementById('btn-sound');
     enemyDot      = document.getElementById('enemy-dot');
