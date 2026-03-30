@@ -2500,18 +2500,18 @@ function updateOnlineUI() {
   document.addEventListener('DOMContentLoaded', init);
 
   // =========== PUBLIC API ===========
-  return {
-    skipAttack, restartStage, nextStage, startBoss,
-    showStages, closeStages, toggleSound,
-    nextTutorial, skipTutorial, replayTutorial,
-    showModeSelect, closeModeSelect, selectMode,
-    onlineCreate, showJoinRoom, onlineJoin,
-    showCreateJoin, cancelOnline, copyRoomCode,
-    dismissLocalBanner,
-    toggleChat, sendChat, voteRematch,
-    showShop, closeShop, buySkin, switchTab,
-    updateShopButton, leaveOnlineGame,
-  };
+return {
+  skipAttack, restartStage, nextStage, startBoss,
+  showStages, closeStages, toggleSound,
+  nextTutorial, skipTutorial, replayTutorial,
+  showModeSelect, closeModeSelect, selectMode,
+  onlineCreate, showJoinRoom, onlineJoin,
+  showCreateJoin, cancelOnline, copyRoomCode,
+  dismissLocalBanner,
+  toggleChat, sendChat, voteRematch,
+  showShop, closeShop, buySkin, switchTab,
+  updateShopButton, leaveOnlineGame
+};
 })();
 
 window.HexAsteal = HexAsteal;
