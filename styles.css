@@ -59,20 +59,6 @@ body {
   50% { transform: scale(1.2); }
 }
 
-#vs-header {
-  font-size: 16px !important;
-  font-weight: 800 !important;
-  color: #fbbf24 !important;
-  letter-spacing: 1px !important;
-  text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
-  animation: vs-glow 2s ease-in-out infinite alternate;
-}
-
-@keyframes vs-glow {
-  0% { text-shadow: 0 0 8px rgba(251, 191, 36, 0.5); }
-  100% { text-shadow: 0 0 12px rgba(251, 191, 36, 0.8); }
-}
-
 /* ---- HUD icon buttons ---- */
 #btn-sound, .hud-shop-btn {
   background: none; border: 1px solid rgba(255,255,255,0.1);
