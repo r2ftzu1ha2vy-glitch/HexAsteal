@@ -818,3 +818,27 @@ body {
   color: #fbbf24;
   cursor: default;
 }
+.refresh-card {
+  max-width: 340px;
+  text-align: center;
+}
+
+.refresh-card h2 {
+  color: #fbbf24;
+  margin-bottom: 12px;
+}
+
+.refresh-btns button {
+  min-width: 100px;
+}
+
+#btn-leave-online {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+#btn-leave-online:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
