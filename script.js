@@ -69,8 +69,13 @@ document.getElementById('refresh-no').onclick = () => {
   cleanupAllOnline();
   gameMode = 'ai';
   startStage(progress.stage);
-  // CALL HERE - Update UI after choosing not to rejoin
+  // UPDATE: Call updateOnlineUI to hide leave button
   updateOnlineUI();
+  
+  // Clear session storage
+  sessionStorage.removeItem('lastRoomCode');
+  sessionStorage.removeItem('lastOnlineSide');
+};;
 };
 }
 
@@ -84,8 +89,11 @@ function rejoinRoom() {
       setStatus('Room no longer exists.');
       gameMode = 'ai';
       startStage(progress.stage);
-      // CALL HERE - Hide leave button if room doesn't exist
+      // UPDATE: Hide leave button if room doesn't exist
       updateOnlineUI();
+      // Clear session storage
+      sessionStorage.removeItem('lastRoomCode');
+      sessionStorage.removeItem('lastOnlineSide');
       return;
     }
     
@@ -98,7 +106,6 @@ function rejoinRoom() {
     // updateOnlineUI will be called inside startOnlineGame
   }, { onlyOnce: true });
 }
-
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
@@ -1375,15 +1382,17 @@ function cancelOnline() {
   lastSeenMsgId = null;
   onlineOverlay.classList.add('hidden');
   
-  // CALL HERE - Update UI when canceling online mode
+  // Clear session storage
+  sessionStorage.removeItem('lastRoomCode');
+  sessionStorage.removeItem('lastOnlineSide');
+  
+  // UPDATE: Call updateOnlineUI when canceling online mode
   updateOnlineUI();
   
   if (gameMode === 'online') {
     gameMode = 'ai';
     startStage(progress.stage);
   }
-}
-
   // FIX: cleanupListeners hoisted to module scope
   function cleanupListeners() {
     if (statusListener && roomCode) {
@@ -1468,8 +1477,12 @@ function startOnlineGame(isHost, seed, roomSettings) {
   render();
   initChat();
   
-  // CALL HERE - Show leave button when online game starts
+  // UPDATE: Show leave button when online game starts
   updateOnlineUI();
+  
+  // Store room info for refresh detection
+  sessionStorage.setItem('lastRoomCode', roomCode);
+  sessionStorage.setItem('lastOnlineSide', onlineSide);
 
   // Monitor room for opponent leaving
   const roomMonitorRef = ref(database, `rooms/${roomCode}`);
@@ -1483,8 +1496,11 @@ function startOnlineGame(isHost, seed, roomSettings) {
           cleanupAllOnline();
           gameMode = 'ai';
           startStage(progress.stage);
-          // CALL HERE - Hide leave button when returning to AI mode
+          // UPDATE: Hide leave button when returning to AI mode
           updateOnlineUI();
+          // Clear session storage
+          sessionStorage.removeItem('lastRoomCode');
+          sessionStorage.removeItem('lastOnlineSide');
         }, 2000);
       }
     }
@@ -1520,7 +1536,11 @@ function leaveOnlineGame() {
   startStage(progress.stage);
   setStatus('Left online match.');
   
-  // CALL HERE - Update UI after leaving
+  // Clear session storage
+  sessionStorage.removeItem('lastRoomCode');
+  sessionStorage.removeItem('lastOnlineSide');
+  
+  // UPDATE: Call updateOnlineUI after leaving
   updateOnlineUI();
 }
 
@@ -1540,8 +1560,31 @@ function cleanupAllOnline() {
   isLeavingRoom = false;
   onlineOverlay.classList.add('hidden');
   
-  // CALL HERE - Hide leave button when cleaning up online session
+  // Clear session storage
+  sessionStorage.removeItem('lastRoomCode');
+  sessionStorage.removeItem('lastOnlineSide');
+  
+  // UPDATE: Call updateOnlineUI when cleaning up online session
   updateOnlineUI();
+}
+function updateOnlineUI() {
+  const leaveBtn = document.getElementById('btn-leave-online');
+  if (leaveBtn) {
+    if (gameMode === 'online') {
+      leaveBtn.classList.remove('hidden');
+    } else {
+      leaveBtn.classList.add('hidden');
+    }
+  }  
+  const onlineStatus = document.getElementById('online-status');
+  if (onlineStatus) {
+    if (gameMode === 'online' && roomCode) {
+      onlineStatus.textContent = `Room: ${roomCode}`;
+      onlineStatus.classList.remove('hidden');
+    } else {
+      onlineStatus.classList.add('hidden');
+    }
+  }
 }
 
   // =========== CHAT ===========
