@@ -105,6 +105,200 @@ function rejoinRoom() {
     // updateOnlineUI will be called inside startOnlineGame
   }, { onlyOnce: true });
 }
+
+// =========== UTILITY FUNCTIONS ===========
+function sanitizeRoomSettings(raw) {
+  const pups = parseInt(raw && raw.pups, 10);
+  const startHexes = parseInt(raw && raw.startHexes, 10);
+  return {
+    pups: isNaN(pups) ? 8 : Math.max(0, Math.min(12, pups)),
+    startHexes: isNaN(startHexes) ? 4 : Math.max(2, Math.min(8, startHexes)),
+    background: (raw && raw.background) || 'original'
+  };
+}
+
+function roomSettingsSummary(s) {
+  return `Power-ups: ${s.pups} · Start hexes: ${s.startHexes} · Board: ${s.background}`;
+}
+
+function applyBoardTheme(theme) {
+  if (!boardEl) return;
+  boardEl.setAttribute('data-theme', theme || 'original');
+}
+
+function visualOwner(owner) {
+  if (owner === PLAYER2) return 'player2';
+  return owner;
+}
+
+function onlineOpponentSide() {
+  return onlineSide === PLAYER ? PLAYER2 : PLAYER;
+}
+
+function startOnlineMoveListener() {
+  if (!roomCode) return;
+  const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+  const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
+
+  moveListener = onValue(moveRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
+    if (data.sender === onlineSide) return;
+    lastSeenMsgId = data.msgId;
+    if (data.turn !== turn) {
+      console.warn('Turn mismatch:', data.turn, 'vs local', turn);
+      return;
+    }
+    handleOnlineMessage(data);
+  });
+}
+
+function cancelOnline() {
+  cleanupListeners();
+  cleanupRematch();
+  teardownChat();
+
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+  }
+
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  onlineOverlay.classList.add('hidden');
+
+  // Clear session storage
+  sessionStorage.removeItem('lastRoomCode');
+  sessionStorage.removeItem('lastOnlineSide');
+
+  // UPDATE: Call updateOnlineUI when canceling online mode
+  updateOnlineUI();
+
+  if (gameMode === 'online') {
+    gameMode = 'ai';
+    startStage(progress.stage);
+  }
+}
+
+function cleanupListeners() {
+  if (statusListener && roomCode) {
+    try { off(ref(database, `rooms/${roomCode}/status`)); } catch (e) {}
+    statusListener = null;
+  }
+  if (roomListener && dbRef) {
+    try { off(dbRef); } catch (e) {}
+    roomListener = null;
+  }
+  if (moveListener && roomCode) {
+    try {
+      const key = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
+      off(ref(database, `rooms/${roomCode}/${key}`));
+    } catch (e) {}
+    moveListener = null;
+  }
+}
+
+function sendOnline(msg) {
+  if (!roomCode) return;
+  const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
+  const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  const payload = {
+    msgId,
+    sender: onlineSide,
+    type: msg.type,
+    move: msg.move || null,
+    turn,
+    ts: Date.now()
+  };
+  update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
+    .catch(err => console.error('Send move failed:', err));
+}
+
+function handleOnlineMessage(data) {
+  if (!data || !data.type) return;
+  if (data.sender === onlineSide) return;
+  if (data.type === 'move') {
+    if (phase !== 'wait-online') { console.warn('Wrong phase for move:', phase); return; }
+    applyRemoteMove(data.move);
+  } else if (data.type === 'skip') {
+    if (phase !== 'wait-online') { console.warn('Wrong phase for skip:', phase); return; }
+    applyRemoteSkip();
+  }
+}
+
+function updateOnlineUI() {
+  const leaveBtn = document.getElementById('btn-leave-online');
+  if (leaveBtn) {
+    if (gameMode === 'online') {
+      leaveBtn.classList.remove('hidden');
+    } else {
+      leaveBtn.classList.add('hidden');
+    }
+  }
+}
+
+let _rngSeed = 0;
+function seededRand(n) {
+  _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
+  return Math.abs(_rngSeed) % n;
+}
+
+function startOnlineGame(isHost, seed, roomSettings) {
+  gameMode = 'online';
+  onlineRoomSettings = sanitizeRoomSettings(roomSettings || {});
+  cfg = mpConfig(onlineRoomSettings);
+  hideAllOverlays();
+  turn = 1;
+  phase = 'select';
+  selectedHex = null;
+  validTargets = [];
+  transferTargets = [];
+  animating = false;
+
+  generateMapSeeded(seed || (Date.now() & 0xffff));
+  createBoard();
+  SFX.stageStart();
+  render();
+  initChat();
+
+  // UPDATE: Show leave button when online game starts
+  updateOnlineUI();
+
+  // Store room info for refresh detection
+  sessionStorage.setItem('lastRoomCode', roomCode);
+  sessionStorage.setItem('lastOnlineSide', onlineSide);
+
+  // Monitor room for opponent leaving
+  const roomMonitorRef = ref(database, `rooms/${roomCode}`);
+  const monitorListener = onValue(roomMonitorRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data && !isLeavingRoom) {
+      if (phase !== 'gameover') {
+        setStatus('⚠️ Opponent has left. Returning to menu...');
+        setTimeout(() => {
+          appendSystemMsg('Opponent disconnected. Room closed.');
+          cleanupAllOnline();
+          gameMode = 'ai';
+          startStage(progress.stage);
+          // UPDATE: Hide leave button when returning to AI mode
+          updateOnlineUI();
+          // Clear session storage
+          sessionStorage.removeItem('lastRoomCode');
+          sessionStorage.removeItem('lastOnlineSide');
+        }, 2000);
+      }
+    }
+  });
+
+  if (onlineSide === PLAYER) {
+    setStatus('𖡎 Your turn (🟢 P1) — select a hex to attack or ⇄ transfer');
+  } else {
+    phase = 'wait-online';
+    setStatus('⏱ Waiting for P1 to move…');
+  }
+  render();
+}
+
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
@@ -261,20 +455,20 @@ const HexAsteal = (function () {
     };
   }
 
-  // FIX: mpConfig now accepts roomSettings parameter and applies them
-  function mpConfig(roomSettings) {
-    const s = sanitizeRoomSettings(roomSettings || {});
-    return {
-      maxTurns: 50,
-      eHexes: s.startHexes || 4,
-      ePow: 4,
-      pPow: 4,
-      blocked: 5,
-      pups: s.pups !== undefined ? s.pups : 8,
-      isBoss: false, bossPow: 0, bossRegen: 1, bossName: null,
-      background: s.background || 'original'
-    };
-  }
+// FIX: mpConfig now accepts roomSettings parameter and applies them
+function mpConfig(roomSettings) {
+  const s = sanitizeRoomSettings(roomSettings || {});
+  return {
+    maxTurns: 50,
+    eHexes: s.startHexes || 4,
+    ePow: 4,
+    pPow: 4,
+    blocked: 5,
+    pups: s.pups !== undefined ? s.pups : 8,  // ← Fixed this line
+    isBoss: false, bossPow: 0, bossRegen: 1, bossName: null,
+    background: s.background || 'original'
+  };
+}
 
   // FIX: sanitizeRoomSettings defined at module scope
   function sanitizeRoomSettings(raw) {
