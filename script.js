@@ -1417,6 +1417,17 @@ function onlineOpponentSide() {
     }
   }
 
+function updateOnlineUI() {
+  const leaveBtn = document.getElementById('btn-leave-online');
+  if (leaveBtn) {
+    if (gameMode === 'online') {
+      leaveBtn.classList.remove('hidden');
+    } else {
+      leaveBtn.classList.add('hidden');
+    }
+  }
+}
+
   let _rngSeed = 0;
   function seededRand(n) {
     _rngSeed = (_rngSeed * 1664525 + 1013904223) & 0xffffffff;
@@ -1440,6 +1451,7 @@ function startOnlineGame(isHost, seed, roomSettings) {
   SFX.stageStart();
   render();
   initChat();
+  
 
   // Monitor room for opponent leaving
   const roomMonitorRef = ref(database, `rooms/${roomCode}`);
@@ -2476,7 +2488,7 @@ function cleanupAllOnline() {
     dismissLocalBanner,
     toggleChat, sendChat, voteRematch,
     showShop, closeShop, buySkin, switchTab,
-    updateShopButton
+    updateShopButton, leaveOnlineGame,
   };
 })();
 
