@@ -2512,6 +2512,6 @@ return {
   showShop, closeShop, buySkin, switchTab,
   updateShopButton, leaveOnlineGame
 };
-})();
+}();
 
 window.HexAsteal = HexAsteal;
