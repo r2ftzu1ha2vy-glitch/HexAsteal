@@ -30,6 +30,70 @@ let rematchVoted = false;
 let rematchListener = null;
 let rematchTimeout = null;
 
+// =========== REFRESH DETECTION ===========
+let refreshDetected = false;
+let refreshOverlay = null;
+let roomCleanupTimeout = null;
+let isLeavingRoom = false;
+
+// Add this function to create refresh overlay
+function createRefreshOverlay() {
+  if (refreshOverlay) return;
+  
+  refreshOverlay = document.createElement('div');
+  refreshOverlay.id = 'refresh-overlay';
+  refreshOverlay.className = 'overlay-screen';
+  refreshOverlay.innerHTML = `
+    <div class="overlay-card refresh-card">
+      <h2>⟳ Refresh Detected</h2>
+      <p>You left the game. Would you like to rejoin your online match?</p>
+      <div class="refresh-btns" style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+        <button class="btn-primary" id="refresh-yes">Yes, Rejoin</button>
+        <button class="btn-ghost" id="refresh-no">No, Stay</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(refreshOverlay);
+  
+  document.getElementById('refresh-yes').onclick = () => {
+    refreshOverlay.classList.add('hidden');
+    rejoinRoom();
+  };
+  
+  document.getElementById('refresh-no').onclick = () => {
+    refreshOverlay.classList.add('hidden');
+    // Clean up room data
+    if (roomCode && onlineSide === PLAYER) {
+      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+    }
+    cleanupAllOnline();
+    gameMode = 'ai';
+    startStage(progress.stage);
+  };
+}
+
+function rejoinRoom() {
+  if (!roomCode) return;
+  
+  const roomRef = ref(database, `rooms/${roomCode}`);
+  onValue(roomRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) {
+      setStatus('Room no longer exists.');
+      gameMode = 'ai';
+      startStage(progress.stage);
+      return;
+    }
+    
+    // Rejoin as the same side
+    onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
+    hideAllOverlays();
+    startOnlineGame(onlineSide === PLAYER, data.seed || (Date.now() & 0xffff), onlineRoomSettings);
+    startOnlineMoveListener();
+    initChat();
+  }, { onlyOnce: true });
+}
+
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
@@ -1064,58 +1128,135 @@ const HexAsteal = (function () {
     });
   }
 
-  function onlineCreate() {
-    SFX.click();
-    document.getElementById('online-create-join').classList.add('hidden');
-    document.getElementById('online-waiting').classList.remove('hidden');
-    document.getElementById('online-back-btn').style.display = 'none';
+function onlineCreate() {
+  SFX.click();
+  document.getElementById('online-create-join').classList.add('hidden');
+  document.getElementById('online-waiting').classList.remove('hidden');
+  document.getElementById('online-back-btn').style.display = 'none';
 
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    roomCode = code;
-    onlineSide = PLAYER;
-    onlineRoomSettings = getOnlineRoomSettings();
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  roomCode = code;
+  onlineSide = PLAYER;
+  onlineRoomSettings = getOnlineRoomSettings();
 
-    document.getElementById('room-code-big').textContent = code;
-    document.getElementById('waiting-text').innerHTML =
-      `Waiting for opponent to join…<div class="room-settings-summary">${roomSettingsSummary(onlineRoomSettings)}</div>`;
+  const settingsSummaryDiv = document.createElement('div');
+  settingsSummaryDiv.className = 'room-settings-summary';
+  settingsSummaryDiv.innerHTML = roomSettingsSummary(onlineRoomSettings);
+  
+  const waitingText = document.getElementById('waiting-text');
+  waitingText.innerHTML = 'Waiting for opponent to join…';
+  waitingText.appendChild(settingsSummaryDiv);
 
-    const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
+  document.getElementById('room-code-big').textContent = code;
 
-    dbRef = ref(database, `rooms/${code}`);
-    set(dbRef, {
-      status: 'waiting',
-      seed,
-      settings: onlineRoomSettings,
-      createdAt: Date.now()
-    }).catch(err => {
-      console.error('Create room error:', err);
-      setOnlineStatus('Failed to create room. Check connection.', 'error');
-    });
+  const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
 
-    const statusRef = ref(database, `rooms/${code}/status`);
-    statusListener = onValue(statusRef, (snapshot) => {
-      if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
-        update(dbRef, { status: 'started' }).catch(console.error);
-        document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+  dbRef = ref(database, `rooms/${code}`);
+  set(dbRef, {
+    status: 'waiting',
+    seed,
+    settings: onlineRoomSettings,
+    createdAt: Date.now(),
+    host: 'player1'
+  }).catch(err => {
+    console.error('Create room error:', err);
+    setOnlineStatus('Failed to create room. Check connection.', 'error');
+  });
 
-        setTimeout(() => {
-          cleanupListeners();
-          onlineOverlay.classList.add('hidden');
-          startOnlineGame(true, seed, onlineRoomSettings);
-          startOnlineMoveListener();
-        }, 700);
-      }
-    });
+  const statusRef = ref(database, `rooms/${code}/status`);
+  statusListener = onValue(statusRef, (snapshot) => {
+    if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
+      update(dbRef, { status: 'started' }).catch(console.error);
+      document.getElementById('waiting-text').innerHTML = 'Opponent joined! Starting…';
+      
+      // Show settings one more time before starting
+      const finalSettings = document.createElement('div');
+      finalSettings.className = 'room-settings-summary';
+      finalSettings.innerHTML = roomSettingsSummary(onlineRoomSettings);
+      document.getElementById('waiting-text').appendChild(finalSettings);
+
+      setTimeout(() => {
+        cleanupListeners();
+        onlineOverlay.classList.add('hidden');
+        startOnlineGame(true, seed, onlineRoomSettings);
+        startOnlineMoveListener();
+      }, 700);
+    }
+  });
+  
+  // Add room cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    if (roomCode && onlineSide === PLAYER && !isLeavingRoom) {
+      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+    }
+  });
+}
+
+function onlineJoin() {
+  SFX.click();
+  const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
+
+  if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+    setOnlineStatus('Enter a valid 4-digit code.', 'error');
+    return;
   }
 
-  function onlineJoin() {
-    SFX.click();
-    const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
+  document.getElementById('online-join-form').classList.add('hidden');
+  const connectingEl = document.getElementById('online-connecting');
+  connectingEl.classList.remove('hidden');
+  connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+  document.getElementById('online-back-btn').style.display = 'none';
 
-    if (code.length !== 4 || !/^\d{4}$/.test(code)) {
-      setOnlineStatus('Enter a valid 4-digit code.', 'error');
+  roomCode = code;
+  onlineSide = PLAYER2;
+  dbRef = ref(database, `rooms/${code}`);
+
+  const joinTimeout = setTimeout(() => {
+    connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found or expired.</p>`;
+    document.getElementById('online-back-btn').style.display = '';
+  }, 12000);
+
+  roomListener = onValue(dbRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) {
+      clearTimeout(joinTimeout);
+      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room not found.</p>`;
+      document.getElementById('online-back-btn').style.display = '';
       return;
     }
+    clearTimeout(joinTimeout);
+
+    if (data.status === 'waiting') {
+      onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
+      
+      // Show settings to joining player
+      connectingEl.innerHTML = `
+        <p class="mode-sub">Joined! Waiting for host to start…</p>
+        <div class="room-settings-summary">${roomSettingsSummary(onlineRoomSettings)}</div>
+        <div class="waiting-dots"><span></span><span></span><span></span></div>
+      `;
+      
+      update(dbRef, { status: 'joined' }).catch(console.error);
+    }
+
+    if (data.status === 'started') {
+      onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
+      cleanupListeners();
+      onlineOverlay.classList.add('hidden');
+      startOnlineGame(false, data.seed, onlineRoomSettings);
+      startOnlineMoveListener();
+      initChat();
+    }
+  });
+  
+  // Add room cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    if (roomCode && !isLeavingRoom) {
+      // Don't delete room if player is just refreshing
+      // The room will be cleaned up by timeout or host
+    }
+  });
+}
 
     document.getElementById('online-join-form').classList.add('hidden');
     const connectingEl = document.getElementById('online-connecting');
@@ -1162,6 +1303,35 @@ const HexAsteal = (function () {
     });
   }
 
+// =========== UTILITY FUNCTIONS (move outside IIFE) ===========
+function sanitizeRoomSettings(raw) {
+  const pups = parseInt(raw && raw.pups, 10);
+  const startHexes = parseInt(raw && raw.startHexes, 10);
+  return {
+    pups: isNaN(pups) ? 8 : Math.max(0, Math.min(12, pups)),
+    startHexes: isNaN(startHexes) ? 4 : Math.max(2, Math.min(8, startHexes)),
+    background: (raw && raw.background) || 'original'
+  };
+}
+
+function roomSettingsSummary(s) {
+  return `Power-ups: ${s.pups} · Start hexes: ${s.startHexes} · Board: ${s.background}`;
+}
+
+function applyBoardTheme(theme) {
+  if (!boardEl) return;
+  boardEl.setAttribute('data-theme', theme || 'original');
+}
+
+function visualOwner(owner) {
+  if (owner === PLAYER2) return 'player2';
+  return owner;
+}
+
+function onlineOpponentSide() {
+  return onlineSide === PLAYER ? PLAYER2 : PLAYER;
+}
+  
   // FIX: startOnlineMoveListener hoisted to module scope (was accidentally nested inside onlineJoin's onValue callback)
   function startOnlineMoveListener() {
     if (!roomCode) return;
@@ -1253,33 +1423,89 @@ const HexAsteal = (function () {
     return Math.abs(_rngSeed) % n;
   }
 
-  function startOnlineGame(isHost, seed, roomSettings) {
-    gameMode = 'online';
-    onlineRoomSettings = sanitizeRoomSettings(roomSettings || {});
-    cfg = mpConfig(onlineRoomSettings);
-    hideAllOverlays();
-    turn = 1;
-    phase = 'select';
-    selectedHex = null;
-    validTargets = [];
-    transferTargets = [];
-    animating = false;
+function startOnlineGame(isHost, seed, roomSettings) {
+  gameMode = 'online';
+  onlineRoomSettings = sanitizeRoomSettings(roomSettings || {});
+  cfg = mpConfig(onlineRoomSettings);
+  hideAllOverlays();
+  turn = 1;
+  phase = 'select';
+  selectedHex = null;
+  validTargets = [];
+  transferTargets = [];
+  animating = false;
 
-    generateMapSeeded(seed || (Date.now() & 0xffff));
-    createBoard();
-    SFX.stageStart();
-    render();
+  generateMapSeeded(seed || (Date.now() & 0xffff));
+  createBoard();
+  SFX.stageStart();
+  render();
+  initChat();
 
-    initChat();
-
-    if (onlineSide === PLAYER) {
-      setStatus('𖡎 Your turn (🟢 P1) — select a hex to attack or ⇄ transfer');
-    } else {
-      phase = 'wait-online';
-      setStatus('⏱ Waiting for P1 to move…');
+  // Monitor room for opponent leaving
+  const roomMonitorRef = ref(database, `rooms/${roomCode}`);
+  const monitorListener = onValue(roomMonitorRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data && !isLeavingRoom) {
+      // Room was deleted - opponent left
+      if (phase !== 'gameover') {
+        setStatus('⚠️ Opponent has left. Returning to menu...');
+        setTimeout(() => {
+          appendSystemMsg('Opponent disconnected. Room closed.');
+          cleanupAllOnline();
+          gameMode = 'ai';
+          startStage(progress.stage);
+        }, 2000);
+      }
     }
-    render();
+  });
+
+  if (onlineSide === PLAYER) {
+    setStatus('𖡎 Your turn (🟢 P1) — select a hex to attack or ⇄ transfer');
+  } else {
+    phase = 'wait-online';
+    setStatus('⏱ Waiting for P1 to move…');
   }
+  render();
+}
+
+function leaveOnlineGame() {
+  if (!roomCode) return;
+  
+  isLeavingRoom = true;
+  
+  // Notify opponent if room still exists
+  if (dbRef) {
+    update(ref(database, `rooms/${roomCode}`), { 
+      status: 'closed',
+      leaver: onlineSide,
+      closedAt: Date.now()
+    }).then(() => {
+      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+    }).catch(() => {});
+  }
+  
+  cleanupAllOnline();
+  gameMode = 'ai';
+  startStage(progress.stage);
+  setStatus('Left online match.');
+}
+
+function cleanupAllOnline() {
+  cleanupListeners();
+  cleanupRematch();
+  teardownChat();
+  
+  if (roomCleanupTimeout) {
+    clearTimeout(roomCleanupTimeout);
+    roomCleanupTimeout = null;
+  }
+  
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  isLeavingRoom = false;
+  onlineOverlay.classList.add('hidden');
+}
 
   // =========== CHAT ===========
   function initChat() {
@@ -2207,6 +2433,27 @@ const HexAsteal = (function () {
     modeOverlay     = document.getElementById('mode-overlay');
     onlineOverlay   = document.getElementById('online-overlay');
     localTurnBanner = document.getElementById('local-turn-banner');
+
+      const lastRoomCode = sessionStorage.getItem('lastRoomCode');
+  const lastSide = sessionStorage.getItem('lastOnlineSide');
+  
+  if (lastRoomCode && lastSide) {
+    roomCode = lastRoomCode;
+    onlineSide = lastSide;
+    createRefreshOverlay();
+    refreshOverlay.classList.remove('hidden');
+  }
+  
+  // Store current room info before page unload
+  window.addEventListener('beforeunload', () => {
+    if (roomCode && gameMode === 'online' && !isLeavingRoom) {
+      sessionStorage.setItem('lastRoomCode', roomCode);
+      sessionStorage.setItem('lastOnlineSide', onlineSide);
+    } else {
+      sessionStorage.removeItem('lastRoomCode');
+      sessionStorage.removeItem('lastOnlineSide');
+    }
+  });
 
     loadProgress();
     updateShopButton();
