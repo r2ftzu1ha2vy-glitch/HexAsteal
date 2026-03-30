@@ -254,9 +254,9 @@ const HexAsteal = (function () {
     const id = progress.equippedSkins.cosmetic || 'none';
     if (id === 'none') return null;
     const map = {
-      horns: { text: '😈', cls: 'hex-cosmetic' },
-      halo:  { text: '😇', cls: 'hex-cosmetic' },
-      crown: { text: '👑', cls: 'hex-cosmetic' }
+      horns: { text: '𓄋', cls: 'hex-cosmetic' },
+      halo:  { text: '⬭', cls: 'hex-cosmetic' },
+      crown: { text: '🜲', cls: 'hex-cosmetic' }
     };
     return map[id] || null;
   }
