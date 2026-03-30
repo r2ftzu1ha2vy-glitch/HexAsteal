@@ -609,8 +609,10 @@ const HexAsteal = (function () {
         const cell = grid[r][c], el = hexEls[key];
         let cls = 'hex';
 
-        if (cell.powerup && cell.owner === NEUTRAL) cls += ` hex-powerup-${cell.powerup}`;
-        else cls += ` hex-${cell.owner}`;
+        const shownOwner = visualOwner(cell.owner);
+
+if (cell.powerup && cell.owner === NEUTRAL) cls += ` hex-powerup-${cell.powerup}`;
+else cls += ` hex-${shownOwner}`;
 
         if (cell.boss && cell.owner === ENEMY) cls += ' hex-boss';
         if (cell.blazeBuffed) cls += ' hex-blaze-buffed';
