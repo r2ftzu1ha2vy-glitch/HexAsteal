@@ -60,16 +60,18 @@ function createRefreshOverlay() {
     rejoinRoom();
   };
   
-  document.getElementById('refresh-no').onclick = () => {
-    refreshOverlay.classList.add('hidden');
-    // Clean up room data
-    if (roomCode && onlineSide === PLAYER) {
-      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
-    }
-    cleanupAllOnline();
-    gameMode = 'ai';
-    startStage(progress.stage);
-  };
+document.getElementById('refresh-no').onclick = () => {
+  refreshOverlay.classList.add('hidden');
+  // Clean up room data
+  if (roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
+  }
+  cleanupAllOnline();
+  gameMode = 'ai';
+  startStage(progress.stage);
+  // CALL HERE - Update UI after choosing not to rejoin
+  updateOnlineUI();
+};
 }
 
 function rejoinRoom() {
@@ -82,6 +84,8 @@ function rejoinRoom() {
       setStatus('Room no longer exists.');
       gameMode = 'ai';
       startStage(progress.stage);
+      // CALL HERE - Hide leave button if room doesn't exist
+      updateOnlineUI();
       return;
     }
     
@@ -91,6 +95,7 @@ function rejoinRoom() {
     startOnlineGame(onlineSide === PLAYER, data.seed || (Date.now() & 0xffff), onlineRoomSettings);
     startOnlineMoveListener();
     initChat();
+    // updateOnlineUI will be called inside startOnlineGame
   }, { onlyOnce: true });
 }
 
@@ -822,6 +827,10 @@ const HexAsteal = (function () {
           if (gameMode === 'local' && ao === PLAYER2) cls += ' p2-selectable';
         }
 
+  if (gameMode === 'online') {
+    updateOnlineUI();
+  }
+        
         el.polygon.setAttribute('class', cls);
 
         // FIX: isViewerOwned, getEquippedColorSkin, getDesignPatternId, getCosmeticMeta all defined
@@ -1352,21 +1361,28 @@ function onlineOpponentSide() {
   }
 
   // FIX: cancelOnline hoisted to module scope
-  function cancelOnline() {
-    cleanupListeners();
-    cleanupRematch();
-    teardownChat();
+function cancelOnline() {
+  cleanupListeners();
+  cleanupRematch();
+  teardownChat();
 
-    if (dbRef && roomCode && onlineSide === PLAYER) {
-      set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
-    }
-
-    dbRef = null;
-    roomCode = null;
-    lastSeenMsgId = null;
-    onlineOverlay.classList.add('hidden');
-    if (gameMode === 'online') gameMode = 'ai';
+  if (dbRef && roomCode && onlineSide === PLAYER) {
+    set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
   }
+
+  dbRef = null;
+  roomCode = null;
+  lastSeenMsgId = null;
+  onlineOverlay.classList.add('hidden');
+  
+  // CALL HERE - Update UI when canceling online mode
+  updateOnlineUI();
+  
+  if (gameMode === 'online') {
+    gameMode = 'ai';
+    startStage(progress.stage);
+  }
+}
 
   // FIX: cleanupListeners hoisted to module scope
   function cleanupListeners() {
@@ -1452,13 +1468,14 @@ function startOnlineGame(isHost, seed, roomSettings) {
   render();
   initChat();
   
+  // CALL HERE - Show leave button when online game starts
+  updateOnlineUI();
 
   // Monitor room for opponent leaving
   const roomMonitorRef = ref(database, `rooms/${roomCode}`);
   const monitorListener = onValue(roomMonitorRef, (snapshot) => {
     const data = snapshot.val();
     if (!data && !isLeavingRoom) {
-      // Room was deleted - opponent left
       if (phase !== 'gameover') {
         setStatus('⚠️ Opponent has left. Returning to menu...');
         setTimeout(() => {
@@ -1466,6 +1483,8 @@ function startOnlineGame(isHost, seed, roomSettings) {
           cleanupAllOnline();
           gameMode = 'ai';
           startStage(progress.stage);
+          // CALL HERE - Hide leave button when returning to AI mode
+          updateOnlineUI();
         }, 2000);
       }
     }
@@ -1500,6 +1519,9 @@ function leaveOnlineGame() {
   gameMode = 'ai';
   startStage(progress.stage);
   setStatus('Left online match.');
+  
+  // CALL HERE - Update UI after leaving
+  updateOnlineUI();
 }
 
 function cleanupAllOnline() {
@@ -1517,6 +1539,9 @@ function cleanupAllOnline() {
   lastSeenMsgId = null;
   isLeavingRoom = false;
   onlineOverlay.classList.add('hidden');
+  
+  // CALL HERE - Hide leave button when cleaning up online session
+  updateOnlineUI();
 }
 
   // =========== CHAT ===========
