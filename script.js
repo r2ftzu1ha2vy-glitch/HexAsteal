@@ -307,10 +307,6 @@ const HexAsteal = (function () {
     ]
   };
 
-let player1Name = "Player1";
-let player2Name = "Player2";
-let currentUserName = "Player";
-  
   function awardHexoneX(pHexes, _eHexes, won) {
     let earnings;
     if (won) {
@@ -823,60 +819,69 @@ let currentUserName = "Player";
   function isValidTarget(r, c)    { return validTargets.some(([vr,vc]) => vr===r && vc===c); }
   function isTransferTarget(r, c) { return transferTargets.some(([vr,vc]) => vr===r && vc===c); }
 
-function updateHUD() {
-  let pH = 0, pP = 0, eH = 0, eP = 0;
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    const cell = grid[r][c];
-    if (cell.owner === PLAYER) { pH++; pP += cell.power; }
-    if (cell.owner === ENEMY || cell.owner === PLAYER2) { eH++; eP += cell.power; }
-  }
-  
-  turnEl.textContent = turn;
-  turnMaxEl.textContent = '/' + cfg.maxTurns;
-  stageNumEl.textContent = gameMode === 'ai' ? currentStage : (gameMode === 'local' ? 'L2P' : 'NET');
-  
-  pHexesEl.textContent = pH;
-  pPowerEl.textContent = pP;
-  eHexesEl.textContent = eH;
-  ePowerEl.textContent = eP;
-  
-  // Update VS header
-  const vsHeader = document.getElementById('vs-header');
-  if (vsHeader) {
-    if (gameMode === 'local') {
-      vsHeader.textContent = `${localTurn === PLAYER ? player1Name : player2Name} V/S ${localTurn === PLAYER ? player2Name : player1Name}`;
-    } else if (gameMode === 'online') {
-      vsHeader.textContent = `${onlineSide === PLAYER ? player1Name : player2Name} V/S ${onlineSide === PLAYER ? player2Name : player1Name}`;
-    } else {
-      vsHeader.textContent = `${player1Name} V/S ${cfg.isBoss ? cfg.bossName : 'FOE'}`;
+  function updateHUD() {
+    let pH = 0, pP = 0, eH = 0, eP = 0;
+    // FIX: onlineOpponentSide is now defined above
+    const oppOnline = onlineOpponentSide();
+
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      if (gameMode === 'online') {
+        if (cell.owner === onlineSide) { pH++; pP += cell.power; }
+        else if (cell.owner === oppOnline) { eH++; eP += cell.power; }
+      } else {
+        if (cell.owner === PLAYER) { pH++; pP += cell.power; }
+        if (cell.owner === ENEMY || cell.owner === PLAYER2) { eH++; eP += cell.power; }
+      }
     }
+
+    turnEl.textContent = turn;
+    turnMaxEl.textContent = '/ ' + cfg.maxTurns;
+    stageNumEl.textContent = gameMode === 'ai' ? currentStage : (gameMode === 'local' ? 'L2P' : 'NET');
+    pHexesEl.textContent = pH;
+    pPowerEl.textContent = pP;
+    eHexesEl.textContent = eH;
+    ePowerEl.textContent = eP;
+
+    // FIX: playerDot declared in module-level let block
+    const colorSkin = getEquippedColorSkin();
+    playerDot.className = 'color-dot';
+    playerDot.style.background = colorSkin.stroke;
+    playerDot.style.boxShadow = `0 0 6px ${colorSkin.stroke}88`;
+
+    if (gameMode === 'local') {
+      pLabel.textContent = 'P1';
+      foeLabel.textContent = 'P2';
+      enemyDot.className = 'color-dot player2-dot';
+      enemyDot.style.background = '';
+      enemyDot.style.boxShadow = '';
+      applyBoardTheme(cfg.background || 'original');
+    } else if (gameMode === 'online') {
+      pLabel.textContent = 'YOU';
+      foeLabel.textContent = 'OPP';
+      enemyDot.className = 'color-dot enemy-dot';
+      enemyDot.style.background = '';
+      enemyDot.style.boxShadow = '';
+      applyBoardTheme(cfg.background || 'original');
+    } else {
+      pLabel.textContent = 'YOU';
+      foeLabel.textContent = cfg.isBoss ? (cfg.bossName || 'BOSS') : 'FOE';
+      enemyDot.className = 'color-dot enemy-dot';
+      enemyDot.style.background = '';
+      enemyDot.style.boxShadow = '';
+      applyBoardTheme('original');
+    }
+
+    if (cfg.isBoss && gameMode === 'ai') {
+      bossBadge.classList.remove('hidden');
+      boardEl.classList.add('boss-mode');
+    } else {
+      bossBadge.classList.add('hidden');
+      boardEl.classList.remove('boss-mode');
+    }
+
+    updateShopButton();
   }
-  
-  // Player labels with names
-  if (gameMode === 'local') {
-    pLabel.textContent = localTurn === PLAYER ? player1Name : player2Name;
-    foeLabel.textContent = localTurn === PLAYER ? player2Name : player1Name;
-    enemyDot.className = 'color-dot player2-dot';
-  } else if (gameMode === 'online') {
-    pLabel.textContent = onlineSide === PLAYER ? player1Name : player2Name;
-    foeLabel.textContent = onlineSide === PLAYER ? player2Name : player1Name;
-    enemyDot.className = 'color-dot player2-dot';
-  } else {
-    pLabel.textContent = player1Name;
-    foeLabel.textContent = cfg.isBoss ? cfg.bossName : 'FOE';
-    enemyDot.className = cfg.isBoss ? 'color-dot enemy-dot' : 'color-dot enemy-dot';
-  }
-  
-  if (cfg.isBoss && gameMode === 'ai') {
-    bossBadge.classList.remove('hidden');
-    boardEl.classList.add('boss-mode');
-  } else {
-    bossBadge.classList.add('hidden');
-    boardEl.classList.remove('boss-mode');
-  }
-  
-  updateShopButton();
-}
 
   // =========== TUTORIAL ===========
   function showTutorial() {
@@ -1035,30 +1040,21 @@ function updateHUD() {
     setTimeout(() => document.getElementById('cd0').focus(), 50);
   }
 
-function setupCodeInputs() {
-  for (let i = 0; i < 4; i++) {
-    const el = document.getElementById('cd' + i);
-    el.value = '';
-    el.oninput = function() {
-      this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(-1);
-      if (this.value && i < 3) document.getElementById('cd' + (i+1)).focus();
-    };
-    el.onpaste = function(e) {
-      e.preventDefault();
-      const paste = (e.clipboardData || window.clipboardData).getData('text').toUpperCase().slice(0,4);
-      for (let j = 0; j < 4; j++) {
-        const inp = document.getElementById('cd' + j);
-        inp.value = paste[j] || '';
-        if (paste[j] && j < 3) document.getElementById('cd' + (j+1)).focus();
-      }
-    };
-    el.onkeydown = function(e) {
-      if (e.key === 'Backspace' && !this.value && i > 0) {
-        document.getElementById('cd' + (i-1)).focus();
-      }
-    };
+  function setupCodeInputs() {
+    for (let i = 0; i < 4; i++) {
+      const el = document.getElementById(`cd${i}`);
+      el.value = '';
+      el.oninput = () => {
+        el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
+        if (el.value && i < 3) document.getElementById(`cd${i+1}`).focus();
+      };
+      el.onkeydown = (e) => {
+        if (e.key === 'Backspace' && !el.value && i > 0) {
+          document.getElementById(`cd${i-1}`).focus();
+        }
+      };
+    }
   }
-}
 
   function getOnlineRoomSettings() {
     return sanitizeRoomSettings({
@@ -1069,9 +1065,7 @@ function setupCodeInputs() {
   }
 
   function onlineCreate() {
-      SFX.click();
-  currentUserName = document.getElementById('username-input').value.trim() || 'Player';
-  player1Name = currentUserName;
+    SFX.click();
     document.getElementById('online-create-join').classList.add('hidden');
     document.getElementById('online-waiting').classList.remove('hidden');
     document.getElementById('online-back-btn').style.display = 'none';
@@ -1115,12 +1109,13 @@ function setupCodeInputs() {
   }
 
   function onlineJoin() {
-  SFX.click();
-  const code = [0,1,2,3].map(i => document.getElementById('cd' + i).value).join('');
-  if (code.length !== 4 || !/^[A-Z0-9]{4}$/.test(code)) {
-    setOnlineStatus('Enter a valid 4-character code (A-Z, 0-9).', 'error');
-    return;
-  }
+    SFX.click();
+    const code = [0,1,2,3].map(i => document.getElementById(`cd${i}`).value).join('');
+
+    if (code.length !== 4 || !/^\d{4}$/.test(code)) {
+      setOnlineStatus('Enter a valid 4-digit code.', 'error');
+      return;
+    }
 
     document.getElementById('online-join-form').classList.add('hidden');
     const connectingEl = document.getElementById('online-connecting');
@@ -1167,46 +1162,6 @@ function setupCodeInputs() {
     });
   }
 
-function findRandomOpponent() {
-  SFX.click();
-  currentUserName = document.getElementById('username-input').value.trim() || 'Player';
-  player1Name = currentUserName;
-  
-  // Create matchmaking queue entry
-  const queueRef = ref(database, 'matchmaking/' + currentUserName);
-  set(queueRef, {
-    name: currentUserName,
-    timestamp: Date.now(),
-    ready: true
-  }).then(() => {
-    document.getElementById('online-create-join').classList.add('hidden');
-    document.getElementById('online-waiting').classList.remove('hidden');
-    document.getElementById('room-code-big').textContent = 'MATCHING...';
-    document.getElementById('waiting-text').textContent = 'Finding random opponent...';
-    
-    // Listen for matches
-    const matchListener = onValue(ref(database, 'matchmaking'), (snapshot) => {
-      const queues = snapshot.val();
-      if (!queues) return;
-      
-      // Find first available opponent
-      for (let key in queues) {
-        if (key !== currentUserName && queues[key].ready) {
-          // Match found!
-          off(ref(database, 'matchmaking'), matchListener);
-          roomCode = key.slice(0,4); // Use opponent's first 4 chars as room
-          onlineSide = PLAYER2;
-          player2Name = queues[key].name;
-          document.getElementById('online-overlay').classList.add('hidden');
-          startOnlineGame(false, Date.now() % 0xffff);
-          startOnlineMoveListener();
-          return;
-        }
-      }
-    });
-  });
-}
-  
   // FIX: startOnlineMoveListener hoisted to module scope (was accidentally nested inside onlineJoin's onValue callback)
   function startOnlineMoveListener() {
     if (!roomCode) return;
