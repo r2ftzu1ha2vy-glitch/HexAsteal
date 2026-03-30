@@ -464,44 +464,11 @@ function mpConfig(roomSettings) {
     ePow: 4,
     pPow: 4,
     blocked: 5,
-    pups: s.pups !== undefined ? s.pups : 8,  // ← Fixed this line
+    pups : s.pups !== undefined ? s.pups : 8,
     isBoss: false, bossPow: 0, bossRegen: 1, bossName: null,
     background: s.background || 'original'
   };
 }
-
-  // FIX: sanitizeRoomSettings defined at module scope
-  function sanitizeRoomSettings(raw) {
-    const pups = parseInt(raw && raw.pups, 10);
-    const startHexes = parseInt(raw && raw.startHexes, 10);
-    return {
-      pups: isNaN(pups) ? 8 : Math.max(0, Math.min(12, pups)),
-      startHexes: isNaN(startHexes) ? 4 : Math.max(2, Math.min(8, startHexes)),
-      background: (raw && raw.background) || 'original'
-    };
-  }
-
-  // FIX: roomSettingsSummary defined at module scope
-  function roomSettingsSummary(s) {
-    return `Power-ups: ${s.pups} · Start hexes: ${s.startHexes} · Board: ${s.background}`;
-  }
-
-  // FIX: applyBoardTheme defined at module scope
-  function applyBoardTheme(theme) {
-    if (!boardEl) return;
-    boardEl.setAttribute('data-theme', theme || 'original');
-  }
-
-  // FIX: visualOwner defined — returns the logical owner string used for CSS classes
-  function visualOwner(owner) {
-    if (owner === PLAYER2) return 'player2';
-    return owner; // 'player', 'enemy', 'neutral', 'blocked'
-  }
-
-  // FIX: onlineOpponentSide defined — returns the opponent's side string
-  function onlineOpponentSide() {
-    return onlineSide === PLAYER ? PLAYER2 : PLAYER;
-  }
 
   // =========== SKIN HELPERS ===========
   // FIX: getEquippedColorSkin, getDesignPatternId, getCosmeticMeta all defined
