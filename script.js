@@ -343,16 +343,30 @@ const HexAsteal = (function () {
     return `design-${id}`;
   }
 
-  function getCosmeticMeta() {
-    const id = progress.equippedSkins.cosmetic || 'none';
-    if (id === 'none') return null;
-    const map = {
-      horns: { text: '𓄋', cls: 'hex-cosmetic' },
-      halo:  { text: '⬭', cls: 'hex-cosmetic' },
-      crown: { text: '🜲', cls: 'hex-cosmetic' }
-    };
-    return map[id] || null;
+  // Returns SVG inner markup for a cosmetic drawn relative to hex center (0,0)
+  // Scaled to fit inside a ~28×28 area centered on the hex
+  function cosmeticSVGPaths(id) {
+    if (id === 'horns') return `
+      <path d="M-7 -8 L-10 -20 Q-8 -17 -4 -10 Z" fill="#ef4444" stroke="#fca5a5" stroke-width="0.6"/>
+      <path d="M7 -8 L10 -20 Q8 -17 4 -10 Z" fill="#ef4444" stroke="#fca5a5" stroke-width="0.6"/>`;
+    if (id === 'halo') return `
+      <ellipse cx="0" cy="-14" rx="9" ry="3.5" fill="none" stroke="#fde68a" stroke-width="2"/>
+      <ellipse cx="0" cy="-14" rx="9" ry="3.5" fill="rgba(253,230,138,0.15)"/>`;
+    if (id === 'crown') return `
+      <path d="M-8 -8 L-8 -16 L-4 -12 L0 -18 L4 -12 L8 -16 L8 -8 Z" fill="#92400e" stroke="#fbbf24" stroke-width="1" stroke-linejoin="round"/>
+      <circle cx="-8" cy="-16" r="1.5" fill="#fbbf24"/>
+      <circle cx="0" cy="-18" r="1.5" fill="#fbbf24"/>
+      <circle cx="8" cy="-16" r="1.5" fill="#fbbf24"/>
+      <rect x="-8" y="-8" width="16" height="2.5" rx="0.8" fill="#fbbf24"/>`;
+    return ''; // 'none'
   }
+
+  function getCosmeticId() {
+    return progress.equippedSkins.cosmetic || 'none';
+  }
+
+  // Legacy: kept for backward compat (unused now but safe)
+  function getCosmeticMeta() { return null; }
 
   // Get opponent skin (for online/local P2)
   function getOpponentColorSkin() {
@@ -372,19 +386,13 @@ const HexAsteal = (function () {
     return null;
   }
 
-  function getOpponentCosmeticMeta() {
-    if (gameMode === 'online') {
-      const id = opponentSkinData.cosmetic || 'none';
-      if (id === 'none') return null;
-      const map = {
-        horns: { text: '𓄋', cls: 'hex-cosmetic' },
-        halo:  { text: '⬭', cls: 'hex-cosmetic' },
-        crown: { text: '🜲', cls: 'hex-cosmetic' }
-      };
-      return map[id] || null;
-    }
-    return null;
+  function getOpponentCosmeticId() {
+    if (gameMode === 'online') return opponentSkinData.cosmetic || 'none';
+    return 'none';
   }
+
+  // Legacy: kept for backward compat
+  function getOpponentCosmeticMeta() { return null; }
 
   function isViewerOwned(owner) {
     if (gameMode === 'online') return owner === onlineSide;
@@ -474,30 +482,62 @@ const HexAsteal = (function () {
     if (bal) bal.textContent = progress.hexoneX;
   }
 
-  // SVG previews for cosmetics
-  function cosmeticSVG(id) {
-    if (id === 'horns') return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <path d="M8 26 L6 10 Q7 6 10 8 L14 20Z" fill="#ef4444" stroke="#f87171" stroke-width="1"/>
-      <path d="M26 26 L28 10 Q27 6 24 8 L20 20Z" fill="#ef4444" stroke="#f87171" stroke-width="1"/>
-      <path d="M8 26 Q17 22 26 26" stroke="#dc2626" stroke-width="1" fill="none"/>
+  // SVG previews for the shop — 50×50 canvas
+  function shopColorSVG(skin) {
+    // Mini hexagon shape filled with the skin color
+    return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="${skin.fill}" stroke="${skin.stroke}" stroke-width="2.5"/>
+      ${skin.id === 'rainbow' ? `<defs><linearGradient id="rg_${skin.id}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="25%" stop-color="#f97316"/><stop offset="50%" stop-color="#22c55e"/><stop offset="75%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="url(#rg_${skin.id})" stroke="#fbbf24" stroke-width="2.5"/>` : ''}
     </svg>`;
-    if (id === 'halo') return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <ellipse cx="17" cy="12" rx="11" ry="4.5" stroke="#fde68a" stroke-width="2.5" fill="none"/>
-      <ellipse cx="17" cy="12" rx="11" ry="4.5" stroke="#fbbf24" stroke-width="1" fill="rgba(253,230,138,0.1)"/>
-      <line x1="10" y1="12" x2="8" y2="26" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.5"/>
-      <line x1="24" y1="12" x2="26" y2="26" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.5"/>
+  }
+
+  function shopDesignSVG(id) {
+    const baseHex = `<polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="#1e2433" stroke="#374151" stroke-width="1.5"/>`;
+    if (id === 'none') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">${baseHex}</svg>`;
+    if (id === 'stripes') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_s"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath>
+      <pattern id="stp" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,255,255,0.3)" stroke-width="3.5"/></pattern></defs>
+      ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#stp)" clip-path="url(#hclip_s)"/>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
+    if (id === 'dots') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_d"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath>
+      <pattern id="dtp" patternUnits="userSpaceOnUse" width="9" height="9"><circle cx="4.5" cy="4.5" r="2" fill="rgba(255,255,255,0.28)"/></pattern></defs>
+      ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#dtp)" clip-path="url(#hclip_d)"/>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
+    if (id === 'swirl') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_w"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath></defs>
+      ${baseHex}
+      <g clip-path="url(#hclip_w)">
+        <path d="M25 8 Q42 25 25 42 Q8 25 25 8" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.8"/>
+        <path d="M25 14 Q38 25 25 36 Q12 25 25 14" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.4"/>
+      </g>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
+    return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">${baseHex}</svg>`;
+  }
+
+  function shopCosmeticSVG(id) {
+    if (id === 'horns') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <path d="M15 32 L10 10 Q12 16 18 24 Z" fill="#ef4444" stroke="#fca5a5" stroke-width="1.2"/>
+      <path d="M35 32 L40 10 Q38 16 32 24 Z" fill="#ef4444" stroke="#fca5a5" stroke-width="1.2"/>
+      <path d="M15 32 Q25 28 35 32" stroke="#dc2626" stroke-width="1" fill="none" stroke-linecap="round"/>
     </svg>`;
-    if (id === 'crown') return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <path d="M5 24 L5 14 L10 19 L17 8 L24 19 L29 14 L29 24 Z" fill="#92400e" stroke="#fbbf24" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="17" cy="8" r="2.5" fill="#fbbf24"/>
-      <circle cx="5" cy="14" r="2" fill="#fbbf24"/>
-      <circle cx="29" cy="14" r="2" fill="#fbbf24"/>
-      <rect x="5" y="24" width="24" height="3" rx="1" fill="#fbbf24"/>
+    if (id === 'halo') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <ellipse cx="25" cy="18" rx="15" ry="6" fill="rgba(253,230,138,0.15)" stroke="#fde68a" stroke-width="3"/>
+      <line x1="13" y1="18" x2="10" y2="40" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.5"/>
+      <line x1="37" y1="18" x2="40" y2="40" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.5"/>
+    </svg>`;
+    if (id === 'crown') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <path d="M8 38 L8 22 L16 30 L25 12 L34 30 L42 22 L42 38 Z" fill="#92400e" stroke="#fbbf24" stroke-width="1.8" stroke-linejoin="round"/>
+      <circle cx="8" cy="22" r="3" fill="#fbbf24"/>
+      <circle cx="25" cy="12" r="3" fill="#fbbf24"/>
+      <circle cx="42" cy="22" r="3" fill="#fbbf24"/>
+      <rect x="8" y="38" width="34" height="5" rx="1.5" fill="#fbbf24"/>
     </svg>`;
     // 'none'
-    return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <line x1="8" y1="8" x2="26" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/>
-      <line x1="26" y1="8" x2="8" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/>
+    return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <circle cx="25" cy="25" r="16" fill="#1a1a2e" stroke="#374151" stroke-width="1.5"/>
+      <line x1="15" y1="15" x2="35" y2="35" stroke="#4b5563" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="35" y1="15" x2="15" y2="35" stroke="#4b5563" stroke-width="2.2" stroke-linecap="round"/>
     </svg>`;
   }
 
@@ -510,7 +550,7 @@ const HexAsteal = (function () {
     const colorsEl = document.getElementById('shop-colors');
     if (colorsEl) colorsEl.innerHTML = SKINS.colors.map(skin => `
       <div class="skin-item ${(progress.ownedSkins.colors || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.color === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="background:${skin.fill};border:2px solid ${skin.stroke};border-radius:8px;width:50px;height:50px;"></div>
+        <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${shopColorSVG(skin)}</div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
           <small style="color:#fbbf24">${skin.price} HexoneX</small>
@@ -522,17 +562,9 @@ const HexAsteal = (function () {
     `).join('');
 
     const designsEl = document.getElementById('shop-designs');
-    if (designsEl) designsEl.innerHTML = SKINS.designs.map(skin => {
-      const preview = skin.id === 'stripes'
-        ? `<svg width="34" height="34" viewBox="0 0 34 34"><defs><pattern id="ps" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.5)" stroke-width="3"/></pattern></defs><rect width="34" height="34" rx="6" fill="#1a1a2e"/><rect width="34" height="34" rx="6" fill="url(#ps)"/></svg>`
-        : skin.id === 'dots'
-        ? `<svg width="34" height="34" viewBox="0 0 34 34"><defs><pattern id="pd" patternUnits="userSpaceOnUse" width="8" height="8"><circle cx="4" cy="4" r="1.5" fill="rgba(255,255,255,0.5)"/></pattern></defs><rect width="34" height="34" rx="6" fill="#1a1a2e"/><rect width="34" height="34" rx="6" fill="url(#pd)"/></svg>`
-        : skin.id === 'swirl'
-        ? `<svg width="34" height="34" viewBox="0 0 34 34"><rect width="34" height="34" rx="6" fill="#1a1a2e"/><path d="M17 4 Q30 17 17 30 Q4 17 17 4" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></svg>`
-        : `<svg width="34" height="34" viewBox="0 0 34 34"><rect width="34" height="34" rx="6" fill="#1a1a2e"/><line x1="8" y1="8" x2="26" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/><line x1="26" y1="8" x2="8" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/></svg>`;
-      return `
+    if (designsEl) designsEl.innerHTML = SKINS.designs.map(skin => `
       <div class="skin-item ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.design === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;">${preview}</div>
+        <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${shopDesignSVG(skin.id)}</div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
           <small style="color:#fbbf24">${skin.price} HexoneX</small>
@@ -540,13 +572,13 @@ const HexAsteal = (function () {
         <button class="shop-action-btn" onclick="HexAsteal.buySkin('designs', '${skin.id}', ${skin.price})">
           ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'Equip' : 'Buy'}
         </button>
-      </div>`;
-    }).join('');
+      </div>
+    `).join('');
 
     const cosmeticsEl = document.getElementById('shop-cosmetics');
     if (cosmeticsEl) cosmeticsEl.innerHTML = SKINS.cosmetics.map(skin => `
       <div class="skin-item ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;">${cosmeticSVG(skin.id)}</div>
+        <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${shopCosmeticSVG(skin.id)}</div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
           <small style="color:#fbbf24">${skin.price} HexoneX</small>
@@ -906,10 +938,10 @@ const HexAsteal = (function () {
         designOverlay.style.fill = 'none';
         designOverlay.style.pointerEvents = 'none';
 
-        const cosmeticIcon = document.createElementNS(NS, 'text');
-        cosmeticIcon.setAttribute('x', cx); cosmeticIcon.setAttribute('y', cy);
-        cosmeticIcon.setAttribute('dy', '-1.6em'); cosmeticIcon.setAttribute('class', 'hex-cosmetic');
-        cosmeticIcon.style.pointerEvents = 'none';
+        // cosmeticGroup: an SVG <g> translated to hex center, holds SVG path cosmetics
+        const cosmeticGroup = document.createElementNS(NS, 'g');
+        cosmeticGroup.setAttribute('transform', `translate(${cx},${cy})`);
+        cosmeticGroup.style.pointerEvents = 'none';
 
         g.appendChild(poly);
         g.appendChild(designOverlay);
@@ -917,10 +949,10 @@ const HexAsteal = (function () {
         g.appendChild(puIcon);
         g.appendChild(statusIcon);
         g.appendChild(bossIcon);
-        g.appendChild(cosmeticIcon);
+        g.appendChild(cosmeticGroup);
         svgEl.appendChild(g);
 
-        hexEls[`${r},${c}`] = { group: g, polygon: poly, text: txt, puIcon, statusIcon, bossIcon, designOverlay, cosmeticIcon };
+        hexEls[`${r},${c}`] = { group: g, polygon: poly, text: txt, puIcon, statusIcon, bossIcon, designOverlay, cosmeticIcon: cosmeticGroup };
       }
     }
 
@@ -995,16 +1027,9 @@ const HexAsteal = (function () {
           const patternId = getDesignPatternId();
           el.designOverlay.style.fill = patternId ? `url(#${patternId})` : 'none';
 
-          const cosmetic = getCosmeticMeta();
-          if (cosmetic) {
-            el.cosmeticIcon.textContent = cosmetic.text;
-            el.cosmeticIcon.setAttribute('class', cosmetic.cls);
-          } else {
-            el.cosmeticIcon.textContent = '';
-            el.cosmeticIcon.setAttribute('class', 'hex-cosmetic');
-          }
+          const cid = getCosmeticId();
+          el.cosmeticIcon.innerHTML = cosmeticSVGPaths(cid);
         } else if (isOpponentOwned(cell.owner)) {
-          // Apply opponent's skin (online: received data, local: default blue)
           const oppColor = getOpponentColorSkin();
           el.polygon.style.fill = oppColor.fill;
           el.polygon.style.stroke = oppColor.stroke;
@@ -1012,20 +1037,13 @@ const HexAsteal = (function () {
           const oppPattern = getOpponentDesignPatternId();
           el.designOverlay.style.fill = oppPattern ? `url(#${oppPattern})` : 'none';
 
-          const oppCosmetic = getOpponentCosmeticMeta();
-          if (oppCosmetic) {
-            el.cosmeticIcon.textContent = oppCosmetic.text;
-            el.cosmeticIcon.setAttribute('class', oppCosmetic.cls);
-          } else {
-            el.cosmeticIcon.textContent = '';
-            el.cosmeticIcon.setAttribute('class', 'hex-cosmetic');
-          }
+          const ocid = getOpponentCosmeticId();
+          el.cosmeticIcon.innerHTML = cosmeticSVGPaths(ocid);
         } else {
           el.polygon.style.fill = '';
           el.polygon.style.stroke = '';
           el.designOverlay.style.fill = 'none';
-          el.cosmeticIcon.textContent = '';
-          el.cosmeticIcon.setAttribute('class', 'hex-cosmetic');
+          el.cosmeticIcon.innerHTML = '';
         }
 
         el.text.textContent = cell.power;
