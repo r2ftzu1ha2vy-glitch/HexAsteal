@@ -1952,10 +1952,11 @@ const HexAsteal = (function () {
   function leaveOnlineGame() {
     SFX.click();
     if (gameMode !== 'online') return;
-    // Mark ourselves as left in Firebase so opponent knows
+    // Use intentional_left so opponent knows this was a deliberate leave,
+    // NOT a refresh/disconnect. declineRejoin does NOT set this flag.
     if (dbRef && roomCode) {
       update(ref(database, `rooms/${roomCode}`), {
-        [`${onlineSide}_left`]: true,
+        [`${onlineSide}_intentional_left`]: true,
         status: 'abandoned'
       }).catch(() => {});
     }
@@ -1967,13 +1968,12 @@ const HexAsteal = (function () {
   // =========== DISCONNECT DETECTION ===========
   function setupDisconnectDetection() {
     if (!roomCode) return;
-    // Watch for opponent leaving
     const oppSide = onlineSide === PLAYER ? PLAYER2 : PLAYER;
-    const oppLeftRef = ref(database, `rooms/${roomCode}/${oppSide}_left`);
+    const oppLeftRef = ref(database, `rooms/${roomCode}/${oppSide}_intentional_left`);
     if (_disconnectListener) { try { off(oppLeftRef); } catch(e){} }
     _disconnectListener = onValue(oppLeftRef, (snap) => {
+      // Only fire when opponent explicitly pressed Leave — NOT when they refreshed and declined rejoin
       if (snap.val() === true && gameMode === 'online') {
-        // Opponent left — show kicked overlay
         sessionStorage.removeItem('hexasteal_rejoin');
         teardownChat();
         cleanupListeners();
@@ -2035,7 +2035,7 @@ const HexAsteal = (function () {
 
     get(dbRef).then(snap => {
       const data = snap.val();
-      if (!data || data.status === 'abandoned' || data[`${side}_left`]) {
+      if (!data || data.status === 'abandoned' || data[`${side}_intentional_left`]) {
         connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room is no longer active.</p>`;
         document.getElementById('online-back-btn').style.display = '';
         sessionStorage.removeItem('hexasteal_rejoin');
@@ -2063,6 +2063,14 @@ const HexAsteal = (function () {
 
   function declineRejoin() {
     SFX.click();
+    // Write a neutral "declined" flag — does NOT set intentional_left,
+    // so the opponent's disconnect listener will NOT fire.
+    // The opponent simply stays in-game waiting, which is correct —
+    // they're not kicked out just because someone refreshed and chose not to rejoin.
+    if (_savedRoomCode && _savedOnlineSide) {
+      const declinedRef = ref(database, `rooms/${_savedRoomCode}/${_savedOnlineSide}_declined_rejoin`);
+      set(declinedRef, true).catch(() => {});
+    }
     sessionStorage.removeItem('hexasteal_rejoin');
     _savedRoomCode = null;
     _savedOnlineSide = null;
