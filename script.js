@@ -33,17 +33,6 @@ let _savedRoomCode = null;
 let _savedOnlineSide = null;
 let _disconnectListener = null;
 
-document.addEventListener("touchstart", playMusic, { once: true });
-document.addEventListener("click", playMusic, { once: true });
-
-function playMusic() {
-  const audio = document.getElementById("music");
-  audio.loop = true;
-  audio.play().catch(err => {
-    console.warn("Audio play failed:", err);
-  });
-}
-
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
@@ -185,6 +174,57 @@ const HexAsteal = (function () {
       this.osc(440, 0.08, 'sine', 0.1);
       setTimeout(() => this.osc(660, 0.08, 'sine', 0.1), 60);
       setTimeout(() => this.osc(550, 0.1, 'sine', 0.12), 120);
+    }
+  };
+
+  // =========== MUSIC ENGINE ===========
+  const MUSIC_NORMAL = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled.mp3';
+  const MUSIC_BOSS   = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/HexAsteal%20Boss%20Music-%5BAudioTrimmer.com%5D.mp3';
+
+  const BGM = {
+    _audio: null,
+    _currentSrc: null,
+    _muted: false,
+
+    play(src) {
+      if (this._muted) return;
+      if (this._audio && this._currentSrc === src && !this._audio.paused) return;
+      if (this._audio) { this._audio.pause(); this._audio.src = ''; }
+      this._audio = new Audio(src);
+      this._audio.loop = true;
+      this._audio.volume = 0.45;
+      this._currentSrc = src;
+      const tryPlay = () => this._audio.play().catch(() => {});
+      tryPlay();
+      // Fallback: unlock on next user gesture if autoplay blocked
+      const unlock = () => {
+        if (!this._muted && this._currentSrc === src) tryPlay();
+        document.removeEventListener('click', unlock);
+        document.removeEventListener('keydown', unlock);
+        document.removeEventListener('touchstart', unlock);
+      };
+      document.addEventListener('click', unlock, { once: true });
+      document.addEventListener('keydown', unlock, { once: true });
+      document.addEventListener('touchstart', unlock, { once: true });
+    },
+
+    playForStage(isBossStage) {
+      this.play(isBossStage ? MUSIC_BOSS : MUSIC_NORMAL);
+    },
+
+    mute() {
+      this._muted = true;
+      if (this._audio) this._audio.pause();
+    },
+
+    unmute() {
+      this._muted = false;
+      if (this._audio && this._currentSrc) this._audio.play().catch(() => {});
+    },
+
+    toggle() {
+      if (this._muted) this.unmute(); else this.mute();
+      return !this._muted;
     }
   };
 
@@ -434,6 +474,33 @@ const HexAsteal = (function () {
     if (bal) bal.textContent = progress.hexoneX;
   }
 
+  // SVG previews for cosmetics
+  function cosmeticSVG(id) {
+    if (id === 'horns') return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <path d="M8 26 L6 10 Q7 6 10 8 L14 20Z" fill="#ef4444" stroke="#f87171" stroke-width="1"/>
+      <path d="M26 26 L28 10 Q27 6 24 8 L20 20Z" fill="#ef4444" stroke="#f87171" stroke-width="1"/>
+      <path d="M8 26 Q17 22 26 26" stroke="#dc2626" stroke-width="1" fill="none"/>
+    </svg>`;
+    if (id === 'halo') return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <ellipse cx="17" cy="12" rx="11" ry="4.5" stroke="#fde68a" stroke-width="2.5" fill="none"/>
+      <ellipse cx="17" cy="12" rx="11" ry="4.5" stroke="#fbbf24" stroke-width="1" fill="rgba(253,230,138,0.1)"/>
+      <line x1="10" y1="12" x2="8" y2="26" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.5"/>
+      <line x1="24" y1="12" x2="26" y2="26" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.5"/>
+    </svg>`;
+    if (id === 'crown') return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <path d="M5 24 L5 14 L10 19 L17 8 L24 19 L29 14 L29 24 Z" fill="#92400e" stroke="#fbbf24" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="17" cy="8" r="2.5" fill="#fbbf24"/>
+      <circle cx="5" cy="14" r="2" fill="#fbbf24"/>
+      <circle cx="29" cy="14" r="2" fill="#fbbf24"/>
+      <rect x="5" y="24" width="24" height="3" rx="1" fill="#fbbf24"/>
+    </svg>`;
+    // 'none'
+    return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <line x1="8" y1="8" x2="26" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/>
+      <line x1="26" y1="8" x2="8" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/>
+    </svg>`;
+  }
+
   function showShop() {
     const overlay = document.getElementById('shop-overlay');
     if (!overlay) return;
@@ -455,9 +522,17 @@ const HexAsteal = (function () {
     `).join('');
 
     const designsEl = document.getElementById('shop-designs');
-    if (designsEl) designsEl.innerHTML = SKINS.designs.map(skin => `
+    if (designsEl) designsEl.innerHTML = SKINS.designs.map(skin => {
+      const preview = skin.id === 'stripes'
+        ? `<svg width="34" height="34" viewBox="0 0 34 34"><defs><pattern id="ps" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.5)" stroke-width="3"/></pattern></defs><rect width="34" height="34" rx="6" fill="#1a1a2e"/><rect width="34" height="34" rx="6" fill="url(#ps)"/></svg>`
+        : skin.id === 'dots'
+        ? `<svg width="34" height="34" viewBox="0 0 34 34"><defs><pattern id="pd" patternUnits="userSpaceOnUse" width="8" height="8"><circle cx="4" cy="4" r="1.5" fill="rgba(255,255,255,0.5)"/></pattern></defs><rect width="34" height="34" rx="6" fill="#1a1a2e"/><rect width="34" height="34" rx="6" fill="url(#pd)"/></svg>`
+        : skin.id === 'swirl'
+        ? `<svg width="34" height="34" viewBox="0 0 34 34"><rect width="34" height="34" rx="6" fill="#1a1a2e"/><path d="M17 4 Q30 17 17 30 Q4 17 17 4" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></svg>`
+        : `<svg width="34" height="34" viewBox="0 0 34 34"><rect width="34" height="34" rx="6" fill="#1a1a2e"/><line x1="8" y1="8" x2="26" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/><line x1="26" y1="8" x2="8" y2="26" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/></svg>`;
+      return `
       <div class="skin-item ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.design === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:18px;">${skin.id !== 'none' ? skin.id[0].toUpperCase() : '—'}</div>
+        <div class="skin-preview" style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;">${preview}</div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
           <small style="color:#fbbf24">${skin.price} HexoneX</small>
@@ -465,13 +540,13 @@ const HexAsteal = (function () {
         <button class="shop-action-btn" onclick="HexAsteal.buySkin('designs', '${skin.id}', ${skin.price})">
           ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'Equip' : 'Buy'}
         </button>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     const cosmeticsEl = document.getElementById('shop-cosmetics');
     if (cosmeticsEl) cosmeticsEl.innerHTML = SKINS.cosmetics.map(skin => `
       <div class="skin-item ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:22px;">${skin.id === 'horns' ? '𓄋' : skin.id === 'halo' ? '⬭' : skin.id === 'crown' ? '🜲' : '—'}</div>
+        <div class="skin-preview" style="background:#1a1a2e;border:2px solid #374151;border-radius:8px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;">${cosmeticSVG(skin.id)}</div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
           <small style="color:#fbbf24">${skin.price} HexoneX</small>
@@ -515,6 +590,7 @@ const HexAsteal = (function () {
       }
     } catch(e) {}
     SFX.on = progress.soundOn;
+    if (!progress.soundOn) BGM.mute();
   }
 
   function saveProgress() {
@@ -1088,7 +1164,9 @@ const HexAsteal = (function () {
   function showBossIntro() {
     bossNameEl.textContent = cfg.bossName;
     bossSubEl.textContent = `Stage ${currentStage} — Boss Battle`;
-    bossOverlay.classList.remove('hidden'); SFX.bossIntro();
+    bossOverlay.classList.remove('hidden');
+    BGM.playForStage(true);
+    SFX.bossIntro();
   }
   function startBoss() {
     SFX.click(); bossOverlay.classList.add('hidden'); generateAndPlay();
@@ -1156,11 +1234,11 @@ const HexAsteal = (function () {
     cfg = mpConfig();
     localTurn = PLAYER;
     hideAllOverlays();
-    // Hide AI diff and leave buttons for local
     const diffBtn = document.getElementById('btn-ai-diff');
     const leaveBtn = document.getElementById('btn-leave-online');
     if (diffBtn) diffBtn.classList.add('hidden');
     if (leaveBtn) leaveBtn.classList.add('hidden');
+    BGM.playForStage(false);
     generateAndPlay();
     updateVSBar('Player 1', 'Player 2');
   }
@@ -1601,6 +1679,7 @@ const HexAsteal = (function () {
     generateMapSeeded(seed || (Date.now() & 0xffff));
     createBoard();
     SFX.stageStart();
+    BGM.playForStage(false);
     render();
     initChat();
 
@@ -2094,12 +2173,13 @@ const HexAsteal = (function () {
     gameMode = 'ai';
     currentStage = s; cfg = stageConfig(s);
     updateVSBar(null, null);
-    // Show AI diff button, hide leave button
     const diffBtn = document.getElementById('btn-ai-diff');
     const leaveBtn = document.getElementById('btn-leave-online');
     if (diffBtn) diffBtn.classList.remove('hidden');
     if (leaveBtn) leaveBtn.classList.add('hidden');
     updateDiffButton();
+    // Play normal music now; boss music starts when boss fight begins
+    if (!cfg.isBoss) BGM.playForStage(false);
     if (cfg.isBoss) showBossIntro();
     else generateAndPlay();
   }
@@ -2643,7 +2723,9 @@ const HexAsteal = (function () {
         iconEl.innerHTML = '<path d="M2 5H5L9 2V12L5 9H2V5Z" fill="#d1d5db"/><line x1="11" y1="4" x2="14" y2="10" stroke="#f87171" stroke-width="1.2" stroke-linecap="round"/><line x1="14" y1="4" x2="11" y2="10" stroke="#f87171" stroke-width="1.2" stroke-linecap="round"/>';
       }
     }
-    if (SFX.on) SFX.click();
+    // Sync BGM with SFX toggle
+    if (SFX.on) { BGM.unmute(); SFX.click(); }
+    else { BGM.mute(); }
   }
 
   // =========== INIT ===========
