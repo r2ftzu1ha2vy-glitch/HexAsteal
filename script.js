@@ -29,6 +29,9 @@ let unreadCount = 0;
 let rematchVoted = false;
 let rematchListener = null;
 let rematchTimeout = null;
+let _savedRoomCode = null;
+let _savedOnlineSide = null;
+let _disconnectListener = null;
 
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
@@ -57,6 +60,35 @@ const HexAsteal = (function () {
   // =========== GAME MODE ===========
   let gameMode = 'ai';
   let localTurn = PLAYER;
+
+  // =========== AI DIFFICULTY ===========
+  const AI_DIFFICULTIES = [
+    { id: 'normal',  label: 'Normal',  cls: 'diff-normal',  scoreThresh: 50,  randomFactor: 12, hexoneXMult: 1.0  },
+    { id: 'hard',    label: 'Hard',    cls: 'diff-hard',    scoreThresh: 30,  randomFactor: 6,  hexoneXMult: 1.5  },
+    { id: 'intense', label: 'Intense', cls: 'diff-intense', scoreThresh: 10,  randomFactor: 3,  hexoneXMult: 2.0  },
+    { id: 'extreme', label: 'Extreme', cls: 'diff-extreme', scoreThresh: -20, randomFactor: 1,  hexoneXMult: 3.0  },
+    { id: 'easy',    label: 'Easy',    cls: 'diff-easy',    scoreThresh: 80,  randomFactor: 25, hexoneXMult: 0.5  }
+  ];
+  let aiDiffIndex = 0;
+
+  function currentDiff() { return AI_DIFFICULTIES[aiDiffIndex]; }
+
+  function cycleAIDifficulty() {
+    SFX.click();
+    aiDiffIndex = (aiDiffIndex + 1) % AI_DIFFICULTIES.length;
+    updateDiffButton();
+    setStatus(`AI difficulty set to: ${currentDiff().label}`);
+  }
+
+  function updateDiffButton() {
+    const btn = document.getElementById('btn-ai-diff');
+    const lbl = document.getElementById('ai-diff-label');
+    if (!btn || !lbl) return;
+    const d = currentDiff();
+    AI_DIFFICULTIES.forEach(dd => btn.classList.remove(dd.cls));
+    btn.classList.add(d.cls);
+    lbl.textContent = d.label;
+  }
 
   // =========== ONLINE ROOM SETTINGS ===========
   let onlineRoomSettings = { pups: 8, startHexes: 4, background: 'original' };
@@ -348,11 +380,13 @@ const HexAsteal = (function () {
   };
 
   function awardHexoneX(pHexes, _eHexes, won) {
+    const mult = (gameMode === 'ai') ? currentDiff().hexoneXMult : 1.0;
     let earnings;
     if (won) {
-      earnings = pHexes * 5;
+      earnings = Math.round(pHexes * 5 * mult);
       progress.hexoneX += earnings;
-      setStatus(`+${earnings} HexoneX! (Win Bonus)`);
+      const diffTag = gameMode === 'ai' ? ` (${currentDiff().label})` : '';
+      setStatus(`+${earnings} HexoneX! (Win Bonus${diffTag})`);
     } else {
       earnings = -(Math.floor(pHexes / 2) * 2);
       progress.hexoneX = Math.max(0, progress.hexoneX + earnings);
@@ -1111,6 +1145,11 @@ const HexAsteal = (function () {
     cfg = mpConfig();
     localTurn = PLAYER;
     hideAllOverlays();
+    // Hide AI diff and leave buttons for local
+    const diffBtn = document.getElementById('btn-ai-diff');
+    const leaveBtn = document.getElementById('btn-leave-online');
+    if (diffBtn) diffBtn.classList.add('hidden');
+    if (leaveBtn) leaveBtn.classList.add('hidden');
     generateAndPlay();
     updateVSBar('Player 1', 'Player 2');
   }
@@ -1247,14 +1286,29 @@ const HexAsteal = (function () {
     const statusRef = ref(database, `rooms/${code}/status`);
     statusListener = onValue(statusRef, (snapshot) => {
       if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
-        update(dbRef, { status: 'started' }).catch(console.error);
-        document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
-        setTimeout(() => {
-          cleanupListeners();
-          onlineOverlay.classList.add('hidden');
-          startOnlineGame(true, seed, onlineRoomSettings);
-          startOnlineMoveListener();
-        }, 700);
+        // Grab P2's skin before starting
+        get(dbRef).then(snap => {
+          const d = snap.val() || {};
+          if (d.p2_skin) opponentSkinData = d.p2_skin;
+          const p2name = d.p2_username || 'Player2';
+          update(dbRef, { status: 'started' }).catch(console.error);
+          document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+          setTimeout(() => {
+            cleanupListeners();
+            onlineOverlay.classList.add('hidden');
+            startOnlineGame(true, seed, onlineRoomSettings, progress.username || 'Player1', p2name);
+            startOnlineMoveListener();
+          }, 700);
+        }).catch(() => {
+          update(dbRef, { status: 'started' }).catch(console.error);
+          document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
+          setTimeout(() => {
+            cleanupListeners();
+            onlineOverlay.classList.add('hidden');
+            startOnlineGame(true, seed, onlineRoomSettings);
+            startOnlineMoveListener();
+          }, 700);
+        });
       }
     });
   }
@@ -1447,6 +1501,7 @@ const HexAsteal = (function () {
     cleanupListeners();
     cleanupRematch();
     teardownChat();
+    if (_disconnectListener) { try { _disconnectListener(); } catch(e){} _disconnectListener = null; }
 
     if (dbRef && roomCode && onlineSide === PLAYER) {
       set(ref(database, `rooms/${roomCode}`), null).catch(() => {});
@@ -1456,9 +1511,20 @@ const HexAsteal = (function () {
     dbRef = null;
     roomCode = null;
     lastSeenMsgId = null;
+    _savedRoomCode = null;
+    _savedOnlineSide = null;
+    sessionStorage.removeItem('hexasteal_rejoin');
+
     onlineOverlay.classList.add('hidden');
     if (gameMode === 'online') gameMode = 'ai';
     updateVSBar(null, null);
+
+    // Hide leave btn, show AI diff btn
+    const leaveBtn = document.getElementById('btn-leave-online');
+    const diffBtn = document.getElementById('btn-ai-diff');
+    if (leaveBtn) leaveBtn.classList.add('hidden');
+    if (diffBtn) diffBtn.classList.remove('hidden');
+    updateDiffButton();
   }
 
   function cleanupListeners() {
@@ -1527,6 +1593,17 @@ const HexAsteal = (function () {
     render();
     initChat();
 
+    // Save rejoin info in case of disconnect
+    _savedRoomCode = roomCode;
+    _savedOnlineSide = onlineSide;
+    sessionStorage.setItem('hexasteal_rejoin', JSON.stringify({ roomCode, onlineSide, seed: seed || 0 }));
+
+    // Show leave button, hide AI diff button
+    const diffBtn = document.getElementById('btn-ai-diff');
+    const leaveBtn = document.getElementById('btn-leave-online');
+    if (diffBtn) diffBtn.classList.add('hidden');
+    if (leaveBtn) leaveBtn.classList.remove('hidden');
+
     // Update VS bar
     const myName = progress.username || (onlineSide === PLAYER ? 'Player1' : 'Player2');
     const oppName = (onlineSide === PLAYER ? (p2name || 'Player2') : (p1name || 'Player1'));
@@ -1543,6 +1620,7 @@ const HexAsteal = (function () {
       setStatus('Waiting for P1 to move…');
     }
     render();
+    setupDisconnectDetection();
   }
 
   // =========== CHAT ===========
@@ -1870,12 +1948,139 @@ const HexAsteal = (function () {
     }
   }
 
+  // =========== LEAVE ONLINE GAME ===========
+  function leaveOnlineGame() {
+    SFX.click();
+    if (gameMode !== 'online') return;
+    // Mark ourselves as left in Firebase so opponent knows
+    if (dbRef && roomCode) {
+      update(ref(database, `rooms/${roomCode}`), {
+        [`${onlineSide}_left`]: true,
+        status: 'abandoned'
+      }).catch(() => {});
+    }
+    sessionStorage.removeItem('hexasteal_rejoin');
+    cancelOnline();
+    startStage(progress.stage);
+  }
+
+  // =========== DISCONNECT DETECTION ===========
+  function setupDisconnectDetection() {
+    if (!roomCode) return;
+    // Watch for opponent leaving
+    const oppSide = onlineSide === PLAYER ? PLAYER2 : PLAYER;
+    const oppLeftRef = ref(database, `rooms/${roomCode}/${oppSide}_left`);
+    if (_disconnectListener) { try { off(oppLeftRef); } catch(e){} }
+    _disconnectListener = onValue(oppLeftRef, (snap) => {
+      if (snap.val() === true && gameMode === 'online') {
+        // Opponent left — show kicked overlay
+        sessionStorage.removeItem('hexasteal_rejoin');
+        teardownChat();
+        cleanupListeners();
+        if (_disconnectListener) { try { off(oppLeftRef); } catch(e){} _disconnectListener = null; }
+        gameMode = 'ai';
+        updateVSBar(null, null);
+        const leaveBtn = document.getElementById('btn-leave-online');
+        const diffBtn = document.getElementById('btn-ai-diff');
+        if (leaveBtn) leaveBtn.classList.add('hidden');
+        if (diffBtn) diffBtn.classList.remove('hidden');
+        updateDiffButton();
+        document.getElementById('opp-left-overlay').classList.remove('hidden');
+      }
+    });
+  }
+
+  function closeOppLeft() {
+    SFX.click();
+    document.getElementById('opp-left-overlay').classList.add('hidden');
+    startStage(progress.stage);
+  }
+
+  // =========== REJOIN AFTER DISCONNECT ===========
+  function checkRejoinOnLoad() {
+    const saved = sessionStorage.getItem('hexasteal_rejoin');
+    if (!saved) return;
+    try {
+      const data = JSON.parse(saved);
+      if (!data || !data.roomCode) return;
+      // Show reconnect popup
+      _savedRoomCode = data.roomCode;
+      _savedOnlineSide = data.onlineSide || PLAYER;
+      const overlay = document.getElementById('disconnect-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+    } catch(e) {
+      sessionStorage.removeItem('hexasteal_rejoin');
+    }
+  }
+
+  function rejoinRoom() {
+    SFX.click();
+    document.getElementById('disconnect-overlay').classList.add('hidden');
+    if (!_savedRoomCode) { startStage(progress.stage); return; }
+
+    const code = _savedRoomCode;
+    const side = _savedOnlineSide || PLAYER;
+    roomCode = code;
+    onlineSide = side;
+    dbRef = ref(database, `rooms/${code}`);
+
+    const connectingEl = document.getElementById('online-connecting');
+    onlineOverlay.classList.remove('hidden');
+    document.getElementById('online-create-join').classList.add('hidden');
+    document.getElementById('online-join-form').classList.add('hidden');
+    document.getElementById('online-waiting').classList.add('hidden');
+    connectingEl.classList.remove('hidden');
+    connectingEl.innerHTML = `<p class="mode-sub">Reconnecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
+    document.getElementById('online-back-btn').style.display = 'none';
+
+    get(dbRef).then(snap => {
+      const data = snap.val();
+      if (!data || data.status === 'abandoned' || data[`${side}_left`]) {
+        connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Room is no longer active.</p>`;
+        document.getElementById('online-back-btn').style.display = '';
+        sessionStorage.removeItem('hexasteal_rejoin');
+        return;
+      }
+      if (data.p1_skin && side === PLAYER2) opponentSkinData = data.p1_skin;
+      if (data.p2_skin && side === PLAYER)  opponentSkinData = data.p2_skin;
+      onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
+
+      // Signal we're back
+      update(dbRef, { [`${side}_reconnected`]: true }).catch(console.error);
+
+      onlineOverlay.classList.add('hidden');
+      const p1name = data.p1_username || 'Player1';
+      const p2name = data.p2_username || 'Player2';
+      startOnlineGame(side === PLAYER, data.seed, onlineRoomSettings, p1name, p2name);
+      startOnlineMoveListener();
+      setupDisconnectDetection();
+    }).catch(() => {
+      connectingEl.innerHTML = `<p class="mode-sub" style="color:#f87171">Could not reconnect. Room may be gone.</p>`;
+      document.getElementById('online-back-btn').style.display = '';
+      sessionStorage.removeItem('hexasteal_rejoin');
+    });
+  }
+
+  function declineRejoin() {
+    SFX.click();
+    sessionStorage.removeItem('hexasteal_rejoin');
+    _savedRoomCode = null;
+    _savedOnlineSide = null;
+    document.getElementById('disconnect-overlay').classList.add('hidden');
+  }
+
   // =========== STAGE MANAGEMENT ===========
   function startStage(s) {
     hideAllOverlays();
     gameMode = 'ai';
     currentStage = s; cfg = stageConfig(s);
     updateVSBar(null, null);
+    // Show AI diff button, hide leave button
+    const diffBtn = document.getElementById('btn-ai-diff');
+    const leaveBtn = document.getElementById('btn-leave-online');
+    if (diffBtn) diffBtn.classList.remove('hidden');
+    if (leaveBtn) leaveBtn.classList.add('hidden');
+    updateDiffButton();
     if (cfg.isBoss) showBossIntro();
     else generateAndPlay();
   }
@@ -2166,6 +2371,7 @@ const HexAsteal = (function () {
   }
 
   function aiAttack() {
+    const diff = currentDiff();
     const attacks = [];
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (grid[r][c].owner !== ENEMY || grid[r][c].frozen) continue;
@@ -2180,12 +2386,14 @@ const HexAsteal = (function () {
     }
 
     let best = null, bestScore = -Infinity;
-    const aggression = Math.min(currentStage * 2, 40);
+    // Aggression scaled by stage AND difficulty
+    const diffAggression = { normal: 0, hard: 20, intense: 45, extreme: 80, easy: -20 };
+    const aggression = Math.min(currentStage * 2, 40) + (diffAggression[diff.id] || 0);
     for (const a of attacks) {
       let score = 0;
-      const diff = a.sPow - a.dPow;
-      if (diff > 0) {
-        score = 100 + diff * 10;
+      const diff2 = a.sPow - a.dPow;
+      if (diff2 > 0) {
+        score = 100 + diff2 * 10;
         if (a.dOwner === PLAYER) score += 50 + aggression;
         score += a.dPow * 3;
         if (a.dPU) {
@@ -2194,13 +2402,14 @@ const HexAsteal = (function () {
           if (a.dPU === 'drain') score += 20;
           if (a.dPU === 'blaze') score += 15;
         }
-      } else if (diff === 0) score = -30;
+      } else if (diff2 === 0) score = -30;
       else score = -100;
-      score += Math.random() * Math.max(2, 12 - currentStage * 0.3);
+      // More randomFactor = dumber AI
+      score += Math.random() * diff.randomFactor;
       if (score > bestScore) { bestScore = score; best = a; }
     }
 
-    if (best && bestScore > 50) {
+    if (best && bestScore > diff.scoreThresh) {
       flashHex(best.sr, best.sc, 'flash-ai-source', 400);
       SFX.aiMove();
       setTimeout(() => {
@@ -2465,6 +2674,10 @@ const HexAsteal = (function () {
     loadProgress();
     updateShopButton();
     updateUsernameDisplay();
+    updateDiffButton();
+
+    // Check if player was in an online game and got disconnected
+    checkRejoinOnLoad();
 
     if (!progress.tutDone) showTutorial();
     else startStage(progress.stage);
@@ -2485,7 +2698,9 @@ const HexAsteal = (function () {
     showShop, closeShop, buySkin, switchTab,
     updateShopButton,
     showUsernameEdit, saveUsername, closeUsernameEdit,
-    findRandomMatch
+    findRandomMatch,
+    cycleAIDifficulty,
+    leaveOnlineGame, rejoinRoom, declineRejoin, closeOppLeft
   };
 })();
 
