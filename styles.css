@@ -766,3 +766,29 @@ body {
 .opp-left-card h2 { font-size: 20px; font-weight: 800; color: #9ca3af; margin-bottom: 8px; }
 .opp-left-card p { font-size: 13px; color: #6b7280; margin-bottom: 22px; }
 .opp-left-icon { display: flex; justify-content: center; margin-bottom: 18px; }
+
+/* ---- HUD Leave Button (online only, top-right) ---- */
+.hud-leave-btn {
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.45) !important;
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.2px;
+  transition: background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.hud-leave-btn:hover {
+  background: rgba(239,68,68,0.25);
+  box-shadow: 0 0 8px rgba(239,68,68,0.3);
+}
+.hud-leave-btn:active { transform: scale(0.96); }
+.hud-leave-btn.hidden { display: none; }
