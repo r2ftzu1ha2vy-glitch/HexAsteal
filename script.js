@@ -33,6 +33,16 @@ let _savedRoomCode = null;
 let _savedOnlineSide = null;
 let _disconnectListener = null;
 
+// Add to HexAsteal object
+toggleMusic() {
+  const music = document.getElementById('music');
+  if (music.paused) {
+    music.play().catch(e => console.log('Music play failed:', e));
+  } else {
+    music.pause();
+  }
+}
+
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
