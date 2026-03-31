@@ -33,6 +33,17 @@ let _savedRoomCode = null;
 let _savedOnlineSide = null;
 let _disconnectListener = null;
 
+document.addEventListener("touchstart", playMusic, { once: true });
+document.addEventListener("click", playMusic, { once: true });
+
+function playMusic() {
+  const audio = document.getElementById("music");
+  audio.loop = true;
+  audio.play().catch(err => {
+    console.warn("Audio play failed:", err);
+  });
+}
+
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
