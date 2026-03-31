@@ -2693,6 +2693,18 @@ const HexAsteal = (function () {
 
   document.addEventListener('DOMContentLoaded', init);
 
+  // Play music once user taps/clicks the screen
+  document.addEventListener("touchstart", playMusic, { once: true });
+  document.addEventListener("click", playMusic, { once: true });
+
+  function playMusic() {
+    const audio = document.getElementById("music");
+    audio.loop = true;
+    audio.play().catch(err => {
+      console.warn("Audio play failed:", err);
+    });
+  }
+  
   // =========== PUBLIC API ===========
   return {
     skipAttack, restartStage, nextStage, startBoss,
