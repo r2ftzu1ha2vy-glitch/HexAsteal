@@ -49,6 +49,10 @@
       <button id="btn-sound" onclick="HexAsteal.toggleSound()" title="Toggle Sound">
         <svg id="sound-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 5H5L9 2V12L5 9H2V5Z" fill="#d1d5db"/><path d="M11 4.5C12.2 5.5 12.2 8.5 11 9.5" stroke="#d1d5db" stroke-width="1.2" stroke-linecap="round"/></svg>
       </button>
+      <button id="btn-leave-online" class="hud-leave-btn hidden" onclick="HexAsteal.leaveOnlineGame()" title="Leave Online Game">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 2H3C2.4 2 2 2.4 2 3V10C2 10.6 2.4 11 3 11H5" stroke="#f87171" stroke-width="1.3" stroke-linecap="round"/><path d="M9 4L12 6.5L9 9" stroke="#f87171" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="6.5" x2="5" y2="6.5" stroke="#f87171" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Leave
+      </button>
     </header>
 
     <!-- VS Bar (online/local only) -->
@@ -98,10 +102,6 @@
         <button id="btn-ai-diff" class="hidden" onclick="HexAsteal.cycleAIDifficulty()">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4" stroke="#f97316" stroke-width="1.1"/><path d="M5.5 3V5.5L7 7" stroke="#f97316" stroke-width="1.1" stroke-linecap="round"/></svg>
           <span id="ai-diff-label">Normal</span>
-        </button>
-        <button id="btn-leave-online" class="hidden" onclick="HexAsteal.leaveOnlineGame()">
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M4 2H2C1.4 2 1 2.4 1 3V8C1 8.6 1.4 9 2 9H4" stroke="#f87171" stroke-width="1.1" stroke-linecap="round"/><path d="M7 3L10 5.5L7 8" stroke="#f87171" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><line x1="10" y1="5.5" x2="4" y2="5.5" stroke="#f87171" stroke-width="1.1" stroke-linecap="round"/></svg>
-          Leave
         </button>
         <button id="btn-username" onclick="HexAsteal.showUsernameEdit()">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="3.5" r="2" stroke="#a3e635" stroke-width="1.1"/><path d="M1.5 9.5C1.5 7.6 3.3 6 5.5 6C7.7 6 9.5 7.6 9.5 9.5" stroke="#a3e635" stroke-width="1.1" stroke-linecap="round"/></svg>
