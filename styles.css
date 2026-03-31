@@ -732,3 +732,37 @@ body {
 .skin-item.owned .shop-action-btn { border-color: rgba(192,132,252,0.4); background: rgba(192,132,252,0.1); color: #c084fc; }
 .skin-item.owned .shop-action-btn:hover { background: rgba(192,132,252,0.2); }
 .skin-item.equipped .shop-action-btn { border-color: rgba(251,191,36,0.5); background: rgba(251,191,36,0.1); color: #fbbf24; cursor: default; }
+
+/* ---- AI Difficulty Button ---- */
+#btn-ai-diff { border-color: rgba(249,115,22,0.4) !important; color: #f97316 !important; }
+#btn-ai-diff:hover { background: rgba(249,115,22,0.1) !important; }
+#btn-ai-diff.diff-easy    { border-color: rgba(74,222,128,0.4) !important; color: #4ade80 !important; }
+#btn-ai-diff.diff-easy:hover { background: rgba(74,222,128,0.1) !important; }
+#btn-ai-diff.diff-normal  { border-color: rgba(249,115,22,0.4) !important; color: #f97316 !important; }
+#btn-ai-diff.diff-hard    { border-color: rgba(251,191,36,0.4) !important; color: #fbbf24 !important; }
+#btn-ai-diff.diff-hard:hover { background: rgba(251,191,36,0.1) !important; }
+#btn-ai-diff.diff-intense { border-color: rgba(239,68,68,0.4) !important; color: #f87171 !important; }
+#btn-ai-diff.diff-intense:hover { background: rgba(239,68,68,0.1) !important; }
+#btn-ai-diff.diff-extreme { border-color: rgba(168,85,247,0.4) !important; color: #c084fc !important; animation: diff-extreme-pulse 1.5s ease-in-out infinite; }
+#btn-ai-diff.diff-extreme:hover { background: rgba(168,85,247,0.1) !important; }
+@keyframes diff-extreme-pulse {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 8px rgba(168,85,247,0.5); }
+}
+
+/* ---- Leave Online Button ---- */
+#btn-leave-online { border-color: rgba(248,113,113,0.4) !important; color: #f87171 !important; }
+#btn-leave-online:hover { background: rgba(248,113,113,0.1) !important; }
+
+/* ---- Disconnect Overlay ---- */
+.disconnect-card { max-width: 320px; padding: 32px 28px; }
+.disconnect-card h2 { font-size: 20px; font-weight: 800; color: #f87171; margin-bottom: 8px; }
+.disconnect-card p { font-size: 13px; color: #9ca3af; margin-bottom: 22px; }
+.disconnect-icon { display: flex; justify-content: center; margin-bottom: 18px; animation: boss-badge-pulse 2s ease-in-out infinite; }
+.disconnect-btns { display: flex; gap: 10px; justify-content: center; }
+
+/* ---- Opponent Left Overlay ---- */
+.opp-left-card { max-width: 300px; padding: 32px 28px; }
+.opp-left-card h2 { font-size: 20px; font-weight: 800; color: #9ca3af; margin-bottom: 8px; }
+.opp-left-card p { font-size: 13px; color: #6b7280; margin-bottom: 22px; }
+.opp-left-icon { display: flex; justify-content: center; margin-bottom: 18px; }
