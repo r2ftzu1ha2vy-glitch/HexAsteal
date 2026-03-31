@@ -7,10 +7,15 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div id="app">
-    <audio id="music" loop autoplay>
-      <source src="https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled.mp3" type="audio/mpeg">
-    </audio>
+  <audio id="music" loop>
+  <source src="https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+  document.addEventListener('click', () => {
+    const music = document.getElementById('music');
+    music.play().catch(err => console.log('Could not play:', err));
+  }, { once: true });
 
     <!-- HUD -->
     <header id="hud">
