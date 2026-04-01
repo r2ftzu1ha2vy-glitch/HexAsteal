@@ -47,14 +47,14 @@ const HexAsteal = (function () {
   const DIRS_ODD  = [[-1,0],[-1,1],[0,1],[1,1],[1,0],[0,-1]];
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 chars, no ambiguous O/0/I/1
 
-  const POWERUPS = {
-    surge:  { icon: '⚡︎' },
-    shield: { icon: '🛡' },
-    drain:  { icon: '☠︎︎' },
-    blaze:  { icon: 'ঌ' },
-    freeze: { icon: '❄' },
-    spread: { icon: '𖦹' }
-  };
+const POWERUPS = {
+  surge:  { icon: '<path d="M12 2L14 8H20L16 11L18 17L12 14L6 17L8 11L4 8H10L12 2Z" fill="#22d3ee" stroke="#67e8f9" stroke-width="0.8"/>', color: '#22d3ee' },
+  shield: { icon: '<rect x="6" y="4" width="12" height="16" rx="2" fill="#a8a29e" stroke="#d6d3d1" stroke-width="1"/>', color: '#a8a29e' },
+  drain:  { icon: '<path d="M12 2L14 8H20L16 11L18 17L12 14L6 17L8 11L4 8H10L12 2Z" fill="#a855f7" stroke="#c084fc" stroke-width="0.8"/>', color: '#a855f7' },
+  blaze:  { icon: '<path d="M8 2L14 6L14 10L20 14L14 18L14 22L8 18L2 14L8 10L8 6Z" fill="#f97316" stroke="#fdba74" stroke-width="0.8"/>', color: '#f97316' },
+  freeze: { icon: '<path d="M12 2L16 8L20 8L16 14L12 20L8 14L4 8L8 8L12 2Z" fill="#7dd3fc" stroke="#bae6fd" stroke-width="0.8"/>', color: '#7dd3fc' },
+  spread: { icon: '<circle cx="12" cy="12" r="8" fill="#f472b6" stroke="#f9a8d4" stroke-width="1.2"/><circle cx="12" cy="12" r="3" fill="white"/>', color: '#f472b6' }
+};
   const PU_KEYS = Object.keys(POWERUPS);
 
   // =========== GAME MODE ===========
@@ -455,12 +455,34 @@ const HexAsteal = (function () {
     updateShopButton();
   }
 
-  function buySkin(type, id, price) {
-    const skin = SKINS[type] && SKINS[type].find(s => s.id === id);
+function buySkin(type, id, price) {
+  const btn = event.target.closest('.shop-action-btn');
+  if (!btn || btn.disabled) return;
+  
+  // Show fake loading (0-2s random)
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'shop-loader';
+  loadingEl.innerHTML = ''; // Pure spinner
+  btn.innerHTML = '';
+  btn.appendChild(loadingEl);
+  btn.disabled = true;
+  
+  // Random delay 0-2000ms
+  const delay = Math.random() * 2000;
+  
+  setTimeout(() => {
+    const skin = SKINS[type]?.find(s => s.id === id);
     if (!skin) return;
+    
     if (!progress.ownedSkins[type]) progress.ownedSkins[type] = [];
+    
     if (!progress.ownedSkins[type].includes(id)) {
-      if (progress.hexoneX < price) { setStatus('Not enough HexoneX!'); return; }
+      if (progress.hexoneX < price) {
+        setStatus('Not enough HexoneX!');
+        btn.textContent = 'Buy';
+        btn.disabled = false;
+        return;
+      }
       progress.ownedSkins[type].push(id);
       progress.hexoneX -= price;
       saveProgress();
@@ -471,10 +493,14 @@ const HexAsteal = (function () {
       saveProgress();
       setStatus(`Equipped ${skin.name}!`);
     }
-    showShop();
+    
     updateShopButton();
-    render();
-  }
+    showShop(); // Refresh shop
+    render();   // Refresh board skins
+    btn.textContent = (progress.ownedSkins[type].includes(id)) ? 'Equip' : 'Buy';
+    btn.disabled = false;
+  }, delay);
+}
 
   function updateShopButton() {
     const btn = document.getElementById('btn-shop');
@@ -483,13 +509,28 @@ const HexAsteal = (function () {
   }
 
   // SVG previews for the shop — 50×50 canvas
-  function shopColorSVG(skin) {
-    // Mini hexagon shape filled with the skin color
-    return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
-      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="${skin.fill}" stroke="${skin.stroke}" stroke-width="2.5"/>
-      ${skin.id === 'rainbow' ? `<defs><linearGradient id="rg_${skin.id}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="25%" stop-color="#f97316"/><stop offset="50%" stop-color="#22c55e"/><stop offset="75%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="url(#rg_${skin.id})" stroke="#fbbf24" stroke-width="2.5"/>` : ''}
+function shopColorSVG(skin) {
+  const baseHex = `<polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="${skin.fill}" stroke="${skin.stroke}" stroke-width="2.5"/>`;
+  
+  if (skin.id === 'rainbow') {
+    return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none" class="rainbow-hex">
+      <defs>
+        <linearGradient id="rg_${skin.id}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ef4444"/>
+          <stop offset="16%" stop-color="#f97316"/>
+          <stop offset="33%" stop-color="#eab308"/>
+          <stop offset="50%" stop-color="#22c55e"/>
+          <stop offset="66%" stop-color="#3b82f6"/>
+          <stop offset="83%" stop-color="#a855f7"/>
+          <stop offset="100%" stop-color="#ec4899"/>
+        </linearGradient>
+      </defs>
+      ${baseHex.replace('stroke-width="2.5"', 'stroke="url(#rg_${skin.id})" stroke-width="3"')}
     </svg>`;
   }
+  
+  return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">${baseHex}</svg>`;
+}}
 
   function shopDesignSVG(id) {
     const baseHex = `<polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="#1e2433" stroke="#374151" stroke-width="1.5"/>`;
@@ -999,6 +1040,13 @@ const HexAsteal = (function () {
 
         if (cell.powerup && cell.owner === NEUTRAL) cls += ` hex-powerup-${cell.powerup}`;
         else cls += ` hex-${shownOwner}`;
+        // When creating power-up icon:
+if (cell.powerup) {
+  const puIcon = document.createElementNS(NS, 'g');
+  puIcon.setAttribute('class', 'hex-powerup-icon');
+  puIcon.innerHTML = POWERUPS[cell.powerup].icon;
+  g.appendChild(puIcon);
+}
 
         if (cell.boss && cell.owner === ENEMY) cls += ' hex-boss';
         if (cell.blazeBuffed) cls += ' hex-blaze-buffed';
