@@ -726,6 +726,7 @@ function shopColorSVG(skin) {
 
   // =========== DOM REFS ===========
   let svgEl, statusEl, turnEl, turnMaxEl, stageNumEl, bossBadge, boardEl;
+  const NS = 'http://www.w3.org/2000/svg';
   let pHexesEl, pPowerEl, eHexesEl, ePowerEl, foeLabel, enemyDot, playerDot, btnSkip, btnSound;
   let pLabel;
   let tutOverlay, tutIcon, tutTitle, tutText, tutDots, tutNextBtn;
