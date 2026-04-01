@@ -429,12 +429,14 @@ const HexAsteal = (function () {
       {id: 'none',    name: 'Plain',   price: 0},
       {id: 'stripes', name: 'Stripes', price: 100},
       {id: 'swirl',   name: 'Swirl',   price: 125},
-      {id: 'dots',    name: 'Dots',    price: 175}
+      {id: 'dots',    name: 'Dots',    price: 175},
+      {id: 'zigzag',  name: 'ZigZag',  price: 200}
     ],
     cosmetics: [
       {id: 'none',  name: 'None',          price: 0},
       {id: 'horns', name: 'Devil Horns',   price: 200},
       {id: 'halo',  name: 'Angel Halo',    price: 200},
+      {id: 'hat',   name: 'Cowboy Hat',    price: 300},
       {id: 'crown', name: 'Victory Crown', price: 350}
     ]
   };
@@ -505,6 +507,14 @@ const HexAsteal = (function () {
       <pattern id="dtp" patternUnits="userSpaceOnUse" width="9" height="9"><circle cx="4.5" cy="4.5" r="2" fill="rgba(255,255,255,0.28)"/></pattern></defs>
       ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#dtp)" clip-path="url(#hclip_d)"/>
       <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
+    if (id === 'zigzag') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_d"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath>
+      <pattern id="dtp" patternUnits="userSpaceOnUse" width="9" height="9"><circle cx="4.5" cy="4.5" r="2" fill="rgba(255,255,255,0.28)"/></pattern></defs>
+      ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#dtp)" clip-path="url(#hclip_d)"/>
+      <g clip-path="url(#hclip_d)" transform="scale(0.085) translate(50,50)">
+        <path fill="white" d="M204.3 118.4L152.5 188l-51.3-69.1L20.99 220l21.94 17.4 57.47-72.5 52.1 69.9 51.8-69.4 51.6 69.5 51.7-69.6 51.8 69.6 52-70 57.6 72.5 22-17.4-80.4-101.1-51.2 69-51.8-69.4-51.7 69.4-51.6-69.5zm0 156.4l-51.8 69.3-51.3-68.8-80.17 100.8 21.92 17.4 57.55-72.4 52 69.8 51.8-69.3 51.6 69.3 51.7-69.3 51.8 69.3 52-69.8 57.7 72.4 21.8-17.4-80.3-100.8-51.2 68.8-51.8-69.3-51.7 69.3-51.6-69.3z"/>
+      </g>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
     if (id === 'swirl') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
       <defs><clipPath id="hclip_w"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath></defs>
       ${baseHex}
@@ -527,6 +537,15 @@ const HexAsteal = (function () {
       <line x1="13" y1="18" x2="10" y2="40" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.5"/>
       <line x1="37" y1="18" x2="40" y2="40" stroke="#fde68a" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.5"/>
     </svg>`;
+    if (id === 'hat') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_h"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath>
+      <pattern id="dtp" patternUnits="userSpaceOnUse" width="9" height="9"><circle cx="4.5" cy="4.5" r="2" fill="rgba(255,255,255,0.28)"/></pattern></defs>
+      ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#dtp)" clip-path="url(#hclip_h)"/>
+      <g clip-path="url(#hclip_h)" transform="scale(0.075) translate(70,70)">
+        <path fill="#fde68a" d="M392.692,257.322c-1.172-8.125-2.488-16.98-3.807-25.984c-5.856-39.012-12.59-81.688-14.86-87.832 c-4.318-11.715-18.371-44.723-68.217-25.984c-15.738,5.926-18.812,11.93-41.648,8.93c-17.273-2.27-28.326-15.59-52.336-24.668 c-49.844-18.883-71.584,11.711-75.902,23.422c-2.27,6.148-9.004,67.121-14.86,106.133c-1.39,8.86-2.633,17.566-3.804,25.621 c37.256,7.535,84.174,12.879,138.705,12.879C309.541,269.837,355.801,264.716,392.692,257.322z"></path>
+        <path fill="#fde68a" d="M443.707,306.509c-8.051-2.196-16.834-4.246-26.057-6.148c-1.83-0.805-3.66-1.535-5.49-2.27h-0.072 c-46.918,10.394-102.254,15.664-156.125,15.664c-53.652,0-108.768-5.27-155.541-15.516c-1.316,0.512-2.707,1.098-4.098,1.684 c-8.858,1.828-17.348,3.73-25.106,5.781l-0.148,0.074C27.008,317.49,0,333.372,0,350.939c0,36.012,114.549,65.289,256.035,65.289 c141.34,0,255.965-29.278,255.965-65.289C512,333.74,486.016,318.22,443.707,306.509z"></path>
+      </g>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
     if (id === 'crown') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
       <path d="M8 38 L8 22 L16 30 L25 12 L34 30 L42 22 L42 38 Z" fill="#92400e" stroke="#fbbf24" stroke-width="1.8" stroke-linejoin="round"/>
       <circle cx="8" cy="22" r="3" fill="#fbbf24"/>
