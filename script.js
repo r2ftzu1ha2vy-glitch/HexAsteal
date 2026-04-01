@@ -428,6 +428,12 @@ const HexAsteal = (function () {
       <path d="M7 -6 Q14 -3 13 1 Q12 3 8 2 L6 -4 Z" fill="#92400e" stroke="#78350f" stroke-width="0.6"/>
       <path d="M-6 -9 Q-5 -18 0 -20 Q5 -18 6 -9 Q3 -11 0 -11 Q-3 -11 -6 -9 Z" fill="#a16207" stroke="#78350f" stroke-width="0.8"/>
       <path d="M-4 -9 Q0 -7 4 -9" fill="none" stroke="#fbbf24" stroke-width="0.8" stroke-linecap="round"/>`;
+    if (id === 'wings') return `
+      <path d="M-3 -4 Q-12 -14 -18 -8 Q-14 -2 -8 0 Q-5 1 -3 0 Z" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.7"/>
+      <path d="M-3 -4 Q-10 -16 -14 -14 Q-12 -8 -6 -5 Z" fill="#c7d2fe" stroke="#6366f1" stroke-width="0.5"/>
+      <path d="M3 -4 Q12 -14 18 -8 Q14 -2 8 0 Q5 1 3 0 Z" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.7"/>
+      <path d="M3 -4 Q10 -16 14 -14 Q12 -8 6 -5 Z" fill="#c7d2fe" stroke="#6366f1" stroke-width="0.5"/>
+      <ellipse cx="0" cy="-2" rx="3" ry="4" fill="#a5b4fc" stroke="#6366f1" stroke-width="0.6"/>`;
     return '';
   }
 
@@ -486,21 +492,27 @@ const HexAsteal = (function () {
       {id: 'purple',  name: 'Void Purple',   price: 75,  stroke: '#a855f7', fill: '#2e1065'},
       {id: 'crimson', name: 'Crimson Red',   price: 100, stroke: '#dc143c', fill: '#4a0010'},
       {id: 'gold',    name: 'Golden Glory',  price: 150, stroke: '#fbbf24', fill: '#92400e'},
-      {id: 'rainbow', name: 'Rainbow',       price: 300, stroke: '#ef4444', fill: '#991b1b', animated: true}
+      {id: 'rainbow', name: 'Rainbow',       price: 300, stroke: '#ef4444', fill: '#991b1b', animated: true},
+      // admin-only
+      {id: 'void',    name: 'Void Rift',     price: 0,   stroke: '#ffffff', fill: '#000000', adminOnly: true},
     ],
     designs: [
       {id: 'none',    name: 'Plain',   price: 0},
       {id: 'stripes', name: 'Stripes', price: 100},
       {id: 'swirl',   name: 'Swirl',   price: 125},
       {id: 'dots',    name: 'Dots',    price: 175},
-      {id: 'zigzag',  name: 'Zigzag',  price: 150}
+      {id: 'zigzag',  name: 'Zigzag',  price: 150},
+      // admin-only
+      {id: 'glitch',  name: 'Glitch',  price: 0,   adminOnly: true},
     ],
     cosmetics: [
       {id: 'none',   name: 'None',          price: 0},
       {id: 'horns',  name: 'Devil Horns',   price: 200},
       {id: 'halo',   name: 'Angel Halo',    price: 200},
       {id: 'crown',  name: 'Victory Crown', price: 350},
-      {id: 'cowboy', name: 'Cowboy Hat',    price: 275}
+      {id: 'cowboy', name: 'Cowboy Hat',    price: 275},
+      // admin-only
+      {id: 'wings',  name: 'Admin Wings',   price: 0,   adminOnly: true},
     ]
   };
 
@@ -527,11 +539,20 @@ const HexAsteal = (function () {
     if (!skin) return;
     if (!progress.ownedSkins[type]) progress.ownedSkins[type] = [];
 
+    const isAdmin = window._hexAdminMode === true;
+
+    // Admin-only skins can only be obtained in admin mode
+    if (skin.adminOnly && !isAdmin) {
+      setStatus('This item is admin-only!');
+      return;
+    }
+
     const isOwned = progress.ownedSkins[type].includes(id);
     const label = isOwned ? `Equipping ${skin.name}…` : `Buying ${skin.name}…`;
 
-    // Validate purchase before showing loader
-    if (!isOwned && progress.hexoneX < price) {
+    // Validate purchase before showing loader (admin skins are free)
+    const effectivePrice = skin.adminOnly ? 0 : price;
+    if (!isOwned && progress.hexoneX < effectivePrice) {
       setStatus('Not enough HexoneX!');
       return;
     }
@@ -544,7 +565,7 @@ const HexAsteal = (function () {
 
       if (!isOwned) {
         progress.ownedSkins[type].push(id);
-        progress.hexoneX -= price;
+        progress.hexoneX -= effectivePrice;
         saveProgress();
         setStatus(`Bought ${skin.name}!`);
       } else {
@@ -577,7 +598,6 @@ const HexAsteal = (function () {
   function shopColorSVG(skin) {
     const hexPts = "25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5";
     if (skin.id === 'rainbow') {
-      // Animated rainbow using CSS hue-rotate
       return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none" style="overflow:visible">
         <defs>
           <linearGradient id="rg_rainbow" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -591,6 +611,21 @@ const HexAsteal = (function () {
         </defs>
         <polygon points="${hexPts}" fill="url(#rg_rainbow)" stroke="#fbbf24" stroke-width="2"
           style="animation: rainbow-hue 2s linear infinite;"/>
+      </svg>`;
+    }
+    if (skin.id === 'void') {
+      return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+        <defs>
+          <radialGradient id="voidgrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#1a0030"/>
+            <stop offset="60%" stop-color="#000010"/>
+            <stop offset="100%" stop-color="#000000"/>
+          </radialGradient>
+        </defs>
+        <polygon points="${hexPts}" fill="url(#voidgrad)" stroke="#ffffff" stroke-width="2"/>
+        <polygon points="${hexPts}" fill="none" stroke="#6366f1" stroke-width="0.8" stroke-dasharray="3 3"/>
+        <circle cx="25" cy="25" r="5" fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.4"/>
+        <text x="25" y="29" text-anchor="middle" font-size="9" fill="#6366f1" font-weight="900" font-family="monospace">ADM</text>
       </svg>`;
     }
     return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
@@ -626,6 +661,18 @@ const HexAsteal = (function () {
       </pattern></defs>
       ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#zzp)" clip-path="url(#hclip_z)"/>
       <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
+    if (id === 'glitch') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_g"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath></defs>
+      ${baseHex}
+      <g clip-path="url(#hclip_g)">
+        <rect x="7" y="14" width="36" height="3" fill="#6366f1" opacity="0.5"/>
+        <rect x="7" y="22" width="28" height="2" fill="#ec4899" opacity="0.6" transform="translate(4,0)"/>
+        <rect x="7" y="29" width="36" height="3" fill="#06b6d4" opacity="0.45"/>
+        <rect x="7" y="36" width="20" height="2" fill="#6366f1" opacity="0.5" transform="translate(-3,0)"/>
+        <rect x="10" y="18" width="8" height="8" fill="#000" opacity="0.3"/>
+        <rect x="30" y="26" width="10" height="5" fill="#ec4899" opacity="0.25"/>
+      </g>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#6366f1" stroke-width="1.5"/></svg>`;
     return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">${baseHex}</svg>`;
   }
 
@@ -656,6 +703,14 @@ const HexAsteal = (function () {
       <rect x="17" y="26" width="16" height="3" rx="1.5" fill="#b45309"/>
       <rect x="18" y="26.5" width="14" height="2" rx="1" fill="#fbbf24" opacity="0.6"/>
     </svg>`;
+    if (id === 'wings') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <path d="M22 30 Q8 18 4 22 Q8 34 16 35 Q19 35 22 33 Z" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.2"/>
+      <path d="M22 30 Q10 16 6 18 Q10 26 18 28 Z" fill="#c7d2fe" stroke="#6366f1" stroke-width="0.8"/>
+      <path d="M28 30 Q42 18 46 22 Q42 34 34 35 Q31 35 28 33 Z" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.2"/>
+      <path d="M28 30 Q40 16 44 18 Q40 26 32 28 Z" fill="#c7d2fe" stroke="#6366f1" stroke-width="0.8"/>
+      <ellipse cx="25" cy="32" rx="4" ry="6" fill="#a5b4fc" stroke="#6366f1" stroke-width="1"/>
+      <circle cx="25" cy="26" r="2" fill="#6366f1" opacity="0.6"/>
+    </svg>`;
     return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
       <circle cx="25" cy="25" r="16" fill="#1a1a2e" stroke="#374151" stroke-width="1.5"/>
       <line x1="15" y1="15" x2="35" y2="35" stroke="#4b5563" stroke-width="2.2" stroke-linecap="round"/>
@@ -669,47 +724,43 @@ const HexAsteal = (function () {
     const balEl = document.getElementById('hexoneX-balance');
     if (balEl) balEl.textContent = progress.hexoneX;
 
+    const isAdmin = window._hexAdminMode === true;
+
+    function renderSkinList(type, items) {
+      return items
+        .filter(skin => !skin.adminOnly || isAdmin)
+        .map(skin => {
+          const ownedArr = progress.ownedSkins[type] || [];
+          const isOwned = ownedArr.includes(skin.id);
+          const isEquipped = progress.equippedSkins[type === 'colors' ? 'color' : type === 'designs' ? 'design' : 'cosmetic'] === skin.id;
+          const adminBadge = skin.adminOnly
+            ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(99,102,241,0.2);border:1px solid #6366f1;color:#a5b4fc;font-weight:800;letter-spacing:0.5px;margin-left:4px;">ADMIN</span>`
+            : '';
+          let previewSVG = '';
+          if (type === 'colors') previewSVG = shopColorSVG(skin);
+          else if (type === 'designs') previewSVG = shopDesignSVG(skin.id);
+          else previewSVG = shopCosmeticSVG(skin.id);
+          const priceLabel = skin.adminOnly ? 'FREE (Admin)' : `${skin.price} HexoneX`;
+          return `
+            <div class="skin-item ${isOwned ? 'owned' : ''} ${isEquipped ? 'equipped' : ''}">
+              <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${previewSVG}</div>
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}${adminBadge}</div>
+                <small style="color:${skin.adminOnly ? '#a5b4fc' : '#fbbf24'}">${priceLabel}</small>
+              </div>
+              <button class="shop-action-btn" onclick="HexAsteal.buySkin('${type}', '${skin.id}', ${skin.price})">
+                ${isOwned ? 'Equip' : 'Buy'}
+              </button>
+            </div>`;
+        }).join('');
+    }
+
     const colorsEl = document.getElementById('shop-colors');
-    if (colorsEl) colorsEl.innerHTML = SKINS.colors.map(skin => `
-      <div class="skin-item ${(progress.ownedSkins.colors || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.color === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${shopColorSVG(skin)}</div>
-        <div style="flex:1">
-          <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
-          <small style="color:#fbbf24">${skin.price} HexoneX</small>
-        </div>
-        <button class="shop-action-btn" onclick="HexAsteal.buySkin('colors', '${skin.id}', ${skin.price})">
-          ${(progress.ownedSkins.colors || []).includes(skin.id) ? 'Equip' : 'Buy'}
-        </button>
-      </div>
-    `).join('');
-
+    if (colorsEl) colorsEl.innerHTML = renderSkinList('colors', SKINS.colors);
     const designsEl = document.getElementById('shop-designs');
-    if (designsEl) designsEl.innerHTML = SKINS.designs.map(skin => `
-      <div class="skin-item ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.design === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${shopDesignSVG(skin.id)}</div>
-        <div style="flex:1">
-          <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
-          <small style="color:#fbbf24">${skin.price} HexoneX</small>
-        </div>
-        <button class="shop-action-btn" onclick="HexAsteal.buySkin('designs', '${skin.id}', ${skin.price})">
-          ${(progress.ownedSkins.designs || []).includes(skin.id) ? 'Equip' : 'Buy'}
-        </button>
-      </div>
-    `).join('');
-
+    if (designsEl) designsEl.innerHTML = renderSkinList('designs', SKINS.designs);
     const cosmeticsEl = document.getElementById('shop-cosmetics');
-    if (cosmeticsEl) cosmeticsEl.innerHTML = SKINS.cosmetics.map(skin => `
-      <div class="skin-item ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'owned' : ''} ${progress.equippedSkins.cosmetic === skin.id ? 'equipped' : ''}">
-        <div class="skin-preview" style="width:50px;height:50px;flex-shrink:0;">${shopCosmeticSVG(skin.id)}</div>
-        <div style="flex:1">
-          <div style="font-size:12px;font-weight:700;color:#f3f4f6">${skin.name}</div>
-          <small style="color:#fbbf24">${skin.price} HexoneX</small>
-        </div>
-        <button class="shop-action-btn" onclick="HexAsteal.buySkin('cosmetics', '${skin.id}', ${skin.price})">
-          ${(progress.ownedSkins.cosmetics || []).includes(skin.id) ? 'Equip' : 'Buy'}
-        </button>
-      </div>
-    `).join('');
+    if (cosmeticsEl) cosmeticsEl.innerHTML = renderSkinList('cosmetics', SKINS.cosmetics);
 
     overlay.classList.remove('hidden');
   }
@@ -1025,6 +1076,28 @@ const HexAsteal = (function () {
     zigzagPat.appendChild(zzPolyline);
     defs.appendChild(zigzagPat);
 
+    // Glitch pattern (admin only) — horizontal colored bands
+    const glitchPat = document.createElementNS(NS, 'pattern');
+    glitchPat.setAttribute('id', 'design-glitch');
+    glitchPat.setAttribute('patternUnits', 'userSpaceOnUse');
+    glitchPat.setAttribute('width', '60'); glitchPat.setAttribute('height', '12');
+    const glitchBands = [
+      ['0','0','60','3','#6366f1','0.45'],
+      ['4','3','44','2','#ec4899','0.4'],
+      ['0','5','60','1','#06b6d4','0.35'],
+      ['8','6','30','2','#000','0.25'],
+      ['0','8','60','2','#6366f1','0.3'],
+      ['16','10','20','2','#ec4899','0.35'],
+    ];
+    glitchBands.forEach(([x,y,w,h,fill,op]) => {
+      const r = document.createElementNS(NS, 'rect');
+      r.setAttribute('x', x); r.setAttribute('y', y);
+      r.setAttribute('width', w); r.setAttribute('height', h);
+      r.setAttribute('fill', fill); r.setAttribute('opacity', op);
+      glitchPat.appendChild(r);
+    });
+    defs.appendChild(glitchPat);
+
     svgEl.appendChild(defs);
 
     for (let r = 0; r < ROWS; r++) {
@@ -1163,10 +1236,15 @@ const HexAsteal = (function () {
         if (isViewerOwned(cell.owner)) {
           const colorSkin = getEquippedColorSkin();
           if (isRainbow) {
-            // Tag it for the rainbow RAF loop; initial colors set there
             el.polygon.classList.add('hex-rainbow-cell');
+          } else if (colorSkin.id === 'void') {
+            el.polygon.classList.remove('hex-rainbow-cell');
+            el.polygon.classList.add('hex-void-cell');
+            el.polygon.style.fill = '#000010';
+            el.polygon.style.stroke = '#ffffff';
           } else {
             el.polygon.classList.remove('hex-rainbow-cell');
+            el.polygon.classList.remove('hex-void-cell');
             el.polygon.style.fill = colorSkin.fill;
             el.polygon.style.stroke = colorSkin.stroke;
           }
@@ -1798,6 +1876,7 @@ const HexAsteal = (function () {
     else { phase = 'wait-online'; setStatus('Waiting for P1 to move…'); }
     render();
     setupDisconnectDetection();
+    startOwnerGiftListener();
   }
 
   // =========== CHAT ===========
@@ -2772,6 +2851,201 @@ const HexAsteal = (function () {
 
   document.addEventListener('DOMContentLoaded', init);
 
+  // =========== ADMIN PANEL FUNCTIONS ===========
+
+  function adminMaxMyHexes() {
+    const owner = (gameMode === 'online') ? onlineSide : PLAYER;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (grid[r][c].owner === owner) grid[r][c].power = MAX_POWER;
+    render(); setStatus('[ADMIN] All your hexes maxed!');
+  }
+
+  function adminGiveHexoneX() {
+    const amt = parseInt(prompt('How much HexoneX to give yourself?', '1000'), 10);
+    if (isNaN(amt) || amt <= 0) return;
+    progress.hexoneX += amt;
+    saveProgress(); updateShopButton();
+    setStatus(`[ADMIN] +${amt} HexoneX given!`);
+  }
+
+  function adminGiveOppHexoneX() {
+    if (gameMode !== 'online' || !roomCode) { setStatus('[ADMIN] Online only!'); return; }
+    const amt = parseInt(prompt('How much HexoneX to give opponent?', '1000'), 10);
+    if (isNaN(amt) || amt <= 0) return;
+    const oppKey = onlineSide === 'player' ? 'admin_opp_hexonex_p2' : 'admin_opp_hexonex_p1';
+    update(ref(database, `rooms/${roomCode}`), { [oppKey]: amt, [oppKey + '_ts']: Date.now() }).catch(console.error);
+    setStatus(`[ADMIN] Sent ${amt} HexoneX to opponent`);
+  }
+
+  function adminMaxOppHexes() {
+    const oppOwner = (gameMode === 'online') ? onlineOpponentSide()
+                    : (gameMode === 'local')  ? PLAYER2 : ENEMY;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (grid[r][c].owner === oppOwner) grid[r][c].power = MAX_POWER;
+    render(); setStatus('[ADMIN] All opponent hexes maxed!');
+  }
+
+  function adminCoverBoard() {
+    const owner = (gameMode === 'online') ? onlineSide : PLAYER;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c].owner === BLOCKED) continue;
+      grid[r][c].owner = owner;
+      grid[r][c].power = MAX_POWER;
+      grid[r][c].powerup = null;
+      grid[r][c].blazeBuffed = false; grid[r][c].shielded = false;
+      grid[r][c].frozen = false; grid[r][c].boss = false;
+    }
+    render(); setStatus('[ADMIN] Board covered!');
+  }
+
+  function adminGiveOppOneHex() {
+    const oppOwner = (gameMode === 'online') ? onlineOpponentSide()
+                    : (gameMode === 'local')  ? PLAYER2 : ENEMY;
+    const myOwner  = (gameMode === 'online') ? onlineSide : PLAYER;
+    let kept = false;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c].owner !== oppOwner) continue;
+      if (!kept) { kept = true; grid[r][c].power = 1; }
+      else { grid[r][c].owner = myOwner; grid[r][c].power = 1; }
+    }
+    render(); setStatus('[ADMIN] Opponent reduced to 1 hex!');
+  }
+
+  function adminGiveOppWin() {
+    const oppOwner = (gameMode === 'online') ? onlineOpponentSide()
+                    : (gameMode === 'local')  ? PLAYER2 : ENEMY;
+    const myOwner  = (gameMode === 'online') ? onlineSide : PLAYER;
+    // Remove all my hexes
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (grid[r][c].owner === myOwner) { grid[r][c].owner = NEUTRAL; grid[r][c].power = 1; }
+    render();
+    setTimeout(() => checkGameOver(), 100);
+    setStatus('[ADMIN] Giving opponent the win…');
+  }
+
+  function adminGiveYouWin() {
+    const oppOwner = (gameMode === 'online') ? onlineOpponentSide()
+                    : (gameMode === 'local')  ? PLAYER2 : ENEMY;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (grid[r][c].owner === oppOwner) { grid[r][c].owner = NEUTRAL; grid[r][c].power = 1; }
+    render();
+    setTimeout(() => checkGameOver(), 100);
+    setStatus('[ADMIN] Giving you the win…');
+  }
+
+  function showAdminPanel() {
+    const el = document.getElementById('admin-panel-overlay');
+    if (el) el.classList.remove('hidden');
+  }
+
+  function closeAdminPanel() {
+    const el = document.getElementById('admin-panel-overlay');
+    if (el) el.classList.add('hidden');
+  }
+
+  // =========== OWNER PANEL FUNCTIONS ===========
+
+  function ownerGiveOppColor() {
+    if (gameMode !== 'online' || !roomCode) { setStatus('[OWNER] Online only!'); return; }
+    const all = SKINS.colors.map(s => `${s.id} — ${s.name}`).join('\n');
+    const id = prompt(`Choose color ID to gift opponent:\n${all}`, 'gold');
+    if (!id) return;
+    const skin = SKINS.colors.find(s => s.id === id.trim());
+    if (!skin) { setStatus('Unknown color!'); return; }
+    const oppKey = onlineSide === 'player' ? 'owner_gift_p2' : 'owner_gift_p1';
+    update(ref(database, `rooms/${roomCode}`), {
+      [oppKey]: { type: 'color', id: skin.id, ts: Date.now() }
+    }).catch(console.error);
+    setStatus(`[OWNER] Gifted ${skin.name} to opponent`);
+  }
+
+  function ownerGiveOppDesign() {
+    if (gameMode !== 'online' || !roomCode) { setStatus('[OWNER] Online only!'); return; }
+    const all = SKINS.designs.map(s => `${s.id} — ${s.name}`).join('\n');
+    const id = prompt(`Choose design ID to gift opponent:\n${all}`, 'stripes');
+    if (!id) return;
+    const skin = SKINS.designs.find(s => s.id === id.trim());
+    if (!skin) { setStatus('Unknown design!'); return; }
+    const oppKey = onlineSide === 'player' ? 'owner_gift_p2' : 'owner_gift_p1';
+    update(ref(database, `rooms/${roomCode}`), {
+      [oppKey]: { type: 'design', id: skin.id, ts: Date.now() }
+    }).catch(console.error);
+    setStatus(`[OWNER] Gifted ${skin.name} design to opponent`);
+  }
+
+  function ownerGiveOppCosmetic() {
+    if (gameMode !== 'online' || !roomCode) { setStatus('[OWNER] Online only!'); return; }
+    const all = SKINS.cosmetics.map(s => `${s.id} — ${s.name}`).join('\n');
+    const id = prompt(`Choose cosmetic ID to gift opponent:\n${all}`, 'crown');
+    if (!id) return;
+    const skin = SKINS.cosmetics.find(s => s.id === id.trim());
+    if (!skin) { setStatus('Unknown cosmetic!'); return; }
+    const oppKey = onlineSide === 'player' ? 'owner_gift_p2' : 'owner_gift_p1';
+    update(ref(database, `rooms/${roomCode}`), {
+      [oppKey]: { type: 'cosmetic', id: skin.id, ts: Date.now() }
+    }).catch(console.error);
+    setStatus(`[OWNER] Gifted ${skin.name} to opponent`);
+  }
+
+  function showOwnerPanel() {
+    const el = document.getElementById('owner-panel-overlay');
+    if (el) el.classList.remove('hidden');
+  }
+
+  function closeOwnerPanel() {
+    const el = document.getElementById('owner-panel-overlay');
+    if (el) el.classList.add('hidden');
+  }
+
+  // =========== LISTEN FOR OWNER GIFTS (Firebase) ===========
+  let _ownerGiftListener = null;
+  let _adminOppHexoneXListener = null;
+  let _lastOwnerGiftTs = 0;
+  let _lastAdminGiftTs = 0;
+
+  function startOwnerGiftListener() {
+    if (!roomCode) return;
+    const myGiftKey = onlineSide === 'player' ? 'owner_gift_p1' : 'owner_gift_p2';
+    const myAdminKey = onlineSide === 'player' ? 'admin_opp_hexonex_p1' : 'admin_opp_hexonex_p2';
+
+    if (_ownerGiftListener) { try { off(ref(database, `rooms/${roomCode}/${myGiftKey}`)); } catch(e){} }
+    _ownerGiftListener = onValue(ref(database, `rooms/${roomCode}/${myGiftKey}`), (snap) => {
+      const d = snap.val();
+      if (!d || !d.ts || d.ts <= _lastOwnerGiftTs) return;
+      _lastOwnerGiftTs = d.ts;
+      // Apply gift to my progress
+      if (d.type === 'color') {
+        if (!progress.ownedSkins.colors.includes(d.id)) progress.ownedSkins.colors.push(d.id);
+        progress.equippedSkins.color = d.id;
+        if (d.id === 'rainbow') startRainbowLoop(); else stopRainbowLoop();
+      } else if (d.type === 'design') {
+        if (!progress.ownedSkins.designs.includes(d.id)) progress.ownedSkins.designs.push(d.id);
+        progress.equippedSkins.design = d.id;
+      } else if (d.type === 'cosmetic') {
+        if (!progress.ownedSkins.cosmetics.includes(d.id)) progress.ownedSkins.cosmetics.push(d.id);
+        progress.equippedSkins.cosmetic = d.id;
+      }
+      saveProgress(); render();
+      const skinName = d.id;
+      setStatus(`🎁 Opponent gifted you: ${skinName}!`);
+    });
+
+    if (_adminOppHexoneXListener) { try { off(ref(database, `rooms/${roomCode}/${myAdminKey}`)); } catch(e){} }
+    _adminOppHexoneXListener = onValue(ref(database, `rooms/${roomCode}/${myAdminKey + '_ts'}`), (snap) => {
+      const ts = snap.val();
+      if (!ts || ts <= _lastAdminGiftTs) return;
+      _lastAdminGiftTs = ts;
+      get(ref(database, `rooms/${roomCode}/${myAdminKey}`)).then(s => {
+        const amt = s.val();
+        if (amt && amt > 0) {
+          progress.hexoneX += amt;
+          saveProgress(); updateShopButton();
+          setStatus(`[ADMIN GIFT] +${amt} HexoneX received!`);
+        }
+      });
+    });
+  }
+
   // =========== PUBLIC API ===========
   return {
     skipAttack, restartStage, nextStage, startBoss,
@@ -2787,8 +3061,241 @@ const HexAsteal = (function () {
     showUsernameEdit, saveUsername, closeUsernameEdit,
     findRandomMatch,
     cycleAIDifficulty,
-    leaveOnlineGame, rejoinRoom, declineRejoin, closeOppLeft
+    leaveOnlineGame, rejoinRoom, declineRejoin, closeOppLeft,
+    // admin panel (exposed so HTML onclick can call them)
+    adminMaxMyHexes, adminGiveHexoneX, adminGiveOppHexoneX,
+    adminMaxOppHexes, adminCoverBoard, adminGiveOppOneHex,
+    adminGiveOppWin, adminGiveYouWin, showAdminPanel, closeAdminPanel,
+    // owner panel
+    ownerGiveOppColor, ownerGiveOppDesign, ownerGiveOppCosmetic,
+    showOwnerPanel, closeOwnerPanel
   };
 })();
 
 window.HexAsteal = HexAsteal;
+
+// =========== CHEAT CODE DETECTION + PANEL INJECTION ===========
+(function() {
+  'use strict';
+
+  const ADMIN_CODE = '1100=-0987654321234567890-=';
+  const OWNER_CODE = '1010=-0987654321234567890-=';
+  let _buf = '';
+
+  window._hexAdminMode  = false;
+  window._hexOwnerMode  = false;
+
+  document.addEventListener('keydown', (e) => {
+    // Don't capture if typing in input
+    if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+    _buf = (_buf + e.key).slice(-(Math.max(ADMIN_CODE.length, OWNER_CODE.length)));
+
+    if (_buf.endsWith(ADMIN_CODE) && !window._hexAdminMode) {
+      window._hexAdminMode = true;
+      injectAdminPanel();
+      showAdminButton();
+      HexAsteal.showShop(); // refresh shop to show admin skins
+      HexAsteal.closeShop();
+      _buf = '';
+    }
+    if (_buf.endsWith(OWNER_CODE) && !window._hexOwnerMode) {
+      window._hexOwnerMode = true;
+      injectOwnerPanel();
+      showOwnerButton();
+      _buf = '';
+    }
+  });
+
+  // ─── SVG ICONS ────────────────────────────────────────────────
+  const adminSVG = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+    <polygon points="6.5,1 8,4.5 12,4.5 9,7 10,11 6.5,9 3,11 4,7 1,4.5 5,4.5" fill="#6366f1" stroke="#a5b4fc" stroke-width="0.6"/>
+    <circle cx="6.5" cy="6.5" r="1.5" fill="#ffffff" opacity="0.9"/>
+  </svg>`;
+
+  const ownerSVG = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+    <path d="M1 10 L3 5 L6.5 8 L10 3 L12 10 Z" fill="#f59e0b" stroke="#fbbf24" stroke-width="0.6" stroke-linejoin="round"/>
+    <rect x="1" y="10" width="11" height="1.5" rx="0.6" fill="#fbbf24"/>
+  </svg>`;
+
+  // ─── INJECT ADMIN BUTTON INTO #buttons ───────────────────────
+  function showAdminButton() {
+    if (document.getElementById('btn-admin')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-admin';
+    btn.title = 'Admin Panel';
+    btn.onclick = () => HexAsteal.showAdminPanel();
+    btn.style.cssText = 'border-color:rgba(99,102,241,0.5)!important;color:#a5b4fc!important;';
+    btn.innerHTML = `${adminSVG} Admin`;
+    document.getElementById('buttons').appendChild(btn);
+  }
+
+  function showOwnerButton() {
+    if (document.getElementById('btn-owner')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-owner';
+    btn.title = 'Owner Panel';
+    btn.onclick = () => HexAsteal.showOwnerPanel();
+    btn.style.cssText = 'border-color:rgba(245,158,11,0.5)!important;color:#fbbf24!important;';
+    btn.innerHTML = `${ownerSVG} Owner`;
+    document.getElementById('buttons').appendChild(btn);
+  }
+
+  // ─── INJECT ADMIN PANEL OVERLAY ──────────────────────────────
+  function injectAdminPanel() {
+    if (document.getElementById('admin-panel-overlay')) return;
+
+    const isOwner = window._hexOwnerMode;
+
+    const el = document.createElement('div');
+    el.id = 'admin-panel-overlay';
+    el.className = 'overlay-screen hidden';
+    el.innerHTML = `
+      <div class="overlay-card" style="max-width:400px;padding:24px 22px;background:#0e0a1e;border-color:rgba(99,102,241,0.3);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <polygon points="11,1 13.5,7.5 20.5,7.5 15,11.5 17,18 11,14.5 5,18 7,11.5 1.5,7.5 8.5,7.5" fill="#6366f1" stroke="#a5b4fc" stroke-width="0.8"/>
+            <circle cx="11" cy="11" r="2.5" fill="#ffffff" opacity="0.9"/>
+          </svg>
+          <h2 style="font-size:18px;font-weight:900;color:#a5b4fc;margin:0;letter-spacing:1px;">ADMIN PANEL</h2>
+          <span style="margin-left:auto;font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(99,102,241,0.2);border:1px solid #6366f1;color:#818cf8;font-weight:800;letter-spacing:1px;">RESTRICTED</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <button class="admin-btn" onclick="HexAsteal.adminMaxMyHexes()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="#4ade80" stroke-width="1.2"/><line x1="6" y1="3" x2="6" y2="9" stroke="#4ade80" stroke-width="1.2"/><line x1="3" y1="6" x2="9" y2="6" stroke="#4ade80" stroke-width="1.2"/></svg>
+            Max My Hexes
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminGiveHexoneX()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L7.2 4.4H11L8.4 6.5L9.6 10L6 8.2L2.4 10L3.6 6.5L1 4.4H4.8Z" fill="#fbbf24"/></svg>
+            Give Me HexoneX
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminGiveOppHexoneX()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L7.2 4.4H11L8.4 6.5L9.6 10L6 8.2L2.4 10L3.6 6.5L1 4.4H4.4Z" fill="#f87171"/></svg>
+            Give Opp HexoneX
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminMaxOppHexes()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="#f87171" stroke-width="1.2"/><path d="M4 6L5.5 7.5L8 4.5" stroke="#f87171" stroke-width="1.2" stroke-linecap="round"/></svg>
+            Max Opp Hexes
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminCoverBoard()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#22d3ee" stroke-width="1.2"/><circle cx="6" cy="6" r="2.5" fill="#22d3ee" opacity="0.5"/></svg>
+            Cover Board
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminGiveOppOneHex()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polygon points="6,1 10,3.5 10,8.5 6,11 2,8.5 2,3.5" stroke="#f97316" stroke-width="1.1" fill="none"/><text x="6" y="8.5" text-anchor="middle" font-size="6" fill="#f97316" font-weight="900">1</text></svg>
+            Opp = 1 Hex
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminGiveOppWin()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 6L5 8L9 4" stroke="#f87171" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Give Opp Win
+          </button>
+          <button class="admin-btn" onclick="HexAsteal.adminGiveYouWin()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 6L5 8L9 4" stroke="#4ade80" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Give You Win
+          </button>
+        </div>
+
+        <div id="admin-owner-section" style="display:none;border-top:1px solid rgba(99,102,241,0.2);padding-top:12px;margin-top:4px;">
+          <p style="font-size:10px;color:#6366f1;font-weight:800;letter-spacing:1px;margin-bottom:8px;">OWNER TOOLS (inline)</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+            <button class="admin-btn owner-btn" onclick="HexAsteal.ownerGiveOppColor()">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="#f59e0b" stroke-width="1"/><circle cx="5.5" cy="5.5" r="2" fill="#f59e0b" opacity="0.6"/></svg>
+              Gift Color
+            </button>
+            <button class="admin-btn owner-btn" onclick="HexAsteal.ownerGiveOppDesign()">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><polygon points="5.5,1 9.5,3 9.5,8 5.5,10 1.5,8 1.5,3" stroke="#f59e0b" stroke-width="1" fill="none"/></svg>
+              Gift Design
+            </button>
+            <button class="admin-btn owner-btn" onclick="HexAsteal.ownerGiveOppCosmetic()">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L7 4H10L7.5 6L8.5 9.5L5.5 7.5L2.5 9.5L3.5 6L1 4H4Z" fill="#f59e0b" opacity="0.7"/></svg>
+              Gift Cosmetic
+            </button>
+          </div>
+        </div>
+
+        <button class="btn-ghost" onclick="HexAsteal.closeAdminPanel()" style="margin-top:14px;width:100%">Close</button>
+      </div>`;
+
+    // Inject styles
+    const style = document.createElement('style');
+    style.textContent = `
+      .admin-btn {
+        padding:7px 8px; border:1px solid rgba(99,102,241,0.35);
+        border-radius:7px; background:rgba(99,102,241,0.08); color:#c7d2fe;
+        font-size:10px; font-weight:700; cursor:pointer; transition:all 0.15s;
+        display:flex; align-items:center; gap:5px; letter-spacing:0.2px;
+      }
+      .admin-btn:hover { background:rgba(99,102,241,0.18); border-color:#6366f1; color:#e0e7ff; }
+      .admin-btn:active { transform:scale(0.97); }
+      .owner-btn { border-color:rgba(245,158,11,0.35)!important; color:#fde68a!important; background:rgba(245,158,11,0.08)!important; }
+      .owner-btn:hover { background:rgba(245,158,11,0.18)!important; border-color:#f59e0b!important; }
+    `;
+    document.head.appendChild(style);
+    document.body.appendChild(el);
+
+    // Show owner section if both modes active
+    if (window._hexOwnerMode) {
+      const sec = el.querySelector('#admin-owner-section');
+      if (sec) sec.style.display = '';
+    }
+  }
+
+  // ─── INJECT OWNER PANEL OVERLAY ──────────────────────────────
+  function injectOwnerPanel() {
+    if (document.getElementById('owner-panel-overlay')) {
+      // If admin panel already shown, reveal its owner section
+      const sec = document.getElementById('admin-owner-section');
+      if (sec) sec.style.display = '';
+      return;
+    }
+
+    const el = document.createElement('div');
+    el.id = 'owner-panel-overlay';
+    el.className = 'overlay-screen hidden';
+    el.innerHTML = `
+      <div class="overlay-card" style="max-width:340px;padding:24px 22px;background:#0e0c0a;border-color:rgba(245,158,11,0.3);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M1 18 L4.5 8 L11 14 L17.5 5 L21 18 Z" fill="#f59e0b" stroke="#fbbf24" stroke-width="0.8" stroke-linejoin="round"/>
+            <rect x="1" y="18" width="20" height="2.5" rx="1" fill="#fbbf24"/>
+          </svg>
+          <h2 style="font-size:18px;font-weight:900;color:#fde68a;margin:0;letter-spacing:1px;">OWNER PANEL</h2>
+          <span style="margin-left:auto;font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(245,158,11,0.15);border:1px solid #f59e0b;color:#fbbf24;font-weight:800;letter-spacing:1px;">ONLINE ONLY</span>
+        </div>
+
+        <p style="font-size:11px;color:#92400e;margin-bottom:14px;">Gift skins to your opponent during an online match.</p>
+
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+          <button class="owner-panel-btn" onclick="HexAsteal.ownerGiveOppColor()">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#f59e0b" stroke-width="1.2"/><circle cx="6.5" cy="6.5" r="2.5" fill="#f59e0b" opacity="0.5"/></svg>
+            Give Opponent Color
+          </button>
+          <button class="owner-panel-btn" onclick="HexAsteal.ownerGiveOppDesign()">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><polygon points="6.5,1 11,3.5 11,9.5 6.5,12 2,9.5 2,3.5" stroke="#f59e0b" stroke-width="1.1" fill="none"/></svg>
+            Give Opponent Design
+          </button>
+          <button class="owner-panel-btn" onclick="HexAsteal.ownerGiveOppCosmetic()">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1L8.2 5.2H12.5L9.2 7.7L10.5 12L6.5 9.5L2.5 12L3.8 7.7L0.5 5.2H4.8Z" fill="#f59e0b" opacity="0.8"/></svg>
+            Give Opponent Cosmetic
+          </button>
+        </div>
+
+        <button class="btn-ghost" onclick="HexAsteal.closeOwnerPanel()" style="margin-top:4px;width:100%">Close</button>
+      </div>`;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .owner-panel-btn {
+        padding:9px 12px; border:1px solid rgba(245,158,11,0.4);
+        border-radius:8px; background:rgba(245,158,11,0.08); color:#fde68a;
+        font-size:12px; font-weight:700; cursor:pointer; transition:all 0.15s;
+        display:flex; align-items:center; gap:7px; width:100%;
+      }
+      .owner-panel-btn:hover { background:rgba(245,158,11,0.18); border-color:#f59e0b; color:#fff; }
+      .owner-panel-btn:active { transform:scale(0.98); }
+    `;
+    document.head.appendChild(style);
+    document.body.appendChild(el);
+  }
+
+})();
