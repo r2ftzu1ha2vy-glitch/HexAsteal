@@ -422,7 +422,7 @@ const HexAsteal = (function () {
       {id: 'blue',    name: 'Cyber Blue',    price: 50,  stroke: '#3b82f6', fill: '#172554'},
       {id: 'purple',  name: 'Void Purple',   price: 75,  stroke: '#a855f7', fill: '#2e1065'},
       {id: 'gold',    name: 'Golden Glory',  price: 150, stroke: '#fbbf24', fill: '#92400e'},
-      {id: 'red',     name: 'crimson red',   price: 200, stroke: '#690000', fill: '#990000'},
+      {id: 'red',     name: 'crimson red',   price: 200, stroke: '#990000', fill: '#690000'},
       {id: 'rainbow', name: 'Rainbow',       price: 300, stroke: '#ef4444', fill: '#991b1b'}
     ],
     designs: [
