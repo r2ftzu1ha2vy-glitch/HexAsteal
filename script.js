@@ -140,7 +140,7 @@ const HexAsteal = (function () {
   'use strict';
 
   // =========== CONSTANTS ===========
-  const COLS = 9, ROWS = 7, HEX_R = 30, MAX_POWER = 9, TOTAL_STAGES = 30;
+  const COLS = 9, ROWS = 7, HEX_R = 30, MAX_POWER = 9, TOTAL_STAGES = 50;
   const HEX_W = Math.sqrt(3) * HEX_R, ROW_H = HEX_R * 1.5;
   const PAD_X = HEX_W / 2 + 14, PAD_Y = HEX_R + 14;
   const PLAYER = 'player', ENEMY = 'enemy', NEUTRAL = 'neutral', BLOCKED = 'blocked';
