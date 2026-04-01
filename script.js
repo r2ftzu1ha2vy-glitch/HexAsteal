@@ -530,7 +530,7 @@ function shopColorSVG(skin) {
   }
   
   return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">${baseHex}</svg>`;
-}}
+}  // ← Only ONE closing brace here
 
   function shopDesignSVG(id) {
     const baseHex = `<polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="#1e2433" stroke="#374151" stroke-width="1.5"/>`;
