@@ -707,27 +707,6 @@ body {
 .shop-grid::-webkit-scrollbar { width: 4px; }
 .shop-grid::-webkit-scrollbar-track { background: transparent; }
 .shop-grid::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-/* Shop Loading Spinner */
-.shop-loader {
-  width: 28px; height: 28px; border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.2);
-  border-top: 2px solid #fbbf24;
-  animation: spin 1s linear infinite;
-  flex-shrink: 0;
-  margin: 0 auto;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Rainbow gradient animation */
-.rainbow-hex {
-  animation: rainbow-shift 3s linear infinite;
-}
-@keyframes rainbow-shift {
-  0% { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
-}
 
 .skin-item {
   display: flex; gap: 10px; align-items: center;
