@@ -33,6 +33,108 @@ let _savedRoomCode = null;
 let _savedOnlineSide = null;
 let _disconnectListener = null;
 
+// =========== SHOP LOADER ===========
+// Inject the shop loader overlay + styles once
+(function injectShopLoader() {
+  const style = document.createElement('style');
+  style.textContent = `
+    #shop-loader-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(4px);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; gap: 16px;
+    }
+    #shop-loader-overlay.hidden { display: none; }
+    .shop-loader-label {
+      font-size: 13px; font-weight: 700; color: #e5e7eb;
+      letter-spacing: 0.5px;
+    }
+    .hex-spinner {
+      animation: hex-spin 0.9s linear infinite;
+      transform-origin: center;
+    }
+    @keyframes hex-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes rainbow-hue {
+      0%   { filter: hue-rotate(0deg); }
+      100% { filter: hue-rotate(360deg); }
+    }
+    .rainbow-spin {
+      animation: rainbow-hue 1.8s linear infinite;
+    }
+  `;
+  document.head.appendChild(style);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'shop-loader-overlay';
+  overlay.className = 'hidden';
+  overlay.innerHTML = `
+    <svg class="hex-spinner" width="54" height="54" viewBox="0 0 54 54" fill="none">
+      <polygon points="27,3 49,15.5 49,38.5 27,51 5,38.5 5,15.5"
+        fill="#1e1040" stroke="#c084fc" stroke-width="2.5"/>
+      <polygon points="27,11 41,19 41,35 27,43 13,35 13,19"
+        fill="none" stroke="#c084fc" stroke-width="1" opacity="0.4"/>
+      <polygon points="27,18 35,22.5 35,31.5 27,36 19,31.5 19,22.5"
+        fill="#c084fc" opacity="0.15"/>
+    </svg>
+    <span class="shop-loader-label" id="shop-loader-label">Processing…</span>
+  `;
+  document.body.appendChild(overlay);
+})();
+
+function showShopLoader(label) {
+  const overlay = document.getElementById('shop-loader-overlay');
+  const lbl = document.getElementById('shop-loader-label');
+  if (lbl) lbl.textContent = label || 'Processing…';
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+function hideShopLoader() {
+  const overlay = document.getElementById('shop-loader-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+// =========== RAINBOW HEX ANIMATION ===========
+// We keep a running hue value and apply it to rainbow-colored hexes every frame
+let _rainbowHue = 0;
+let _rainbowRafId = null;
+
+function startRainbowLoop() {
+  if (_rainbowRafId) return;
+  function tick() {
+    _rainbowHue = (_rainbowHue + 0.8) % 360;
+    document.querySelectorAll('.hex-rainbow-cell').forEach(poly => {
+      const h = _rainbowHue;
+      // Smooth HSL cycle: vibrant saturated colors
+      const fill = `hsl(${h}, 85%, 18%)`;
+      const stroke = `hsl(${(h + 30) % 360}, 100%, 60%)`;
+      poly.style.fill = fill;
+      poly.style.stroke = stroke;
+    });
+    _rainbowRafId = requestAnimationFrame(tick);
+  }
+  _rainbowRafId = requestAnimationFrame(tick);
+}
+
+function stopRainbowLoop() {
+  if (_rainbowRafId) { cancelAnimationFrame(_rainbowRafId); _rainbowRafId = null; }
+}
+
+// =========== POWERUP SVG ICONS ===========
+// Returns inline SVG string for each powerup, centered at 0,0 inside ~20x20 area
+const POWERUP_SVG = {
+  surge:  `<path d="M2 -8 L-2 0 L1 0 L-2 8 L6 -2 L2 -2 L6 -8 Z" fill="#22d3ee" stroke="#67e8f9" stroke-width="0.4"/>`,
+  shield: `<path d="M0 -8 L6 -4 L6 2 Q6 7 0 9 Q-6 7 -6 2 L-6 -4 Z" fill="#a8a29e" stroke="#d6d3d1" stroke-width="0.5"/><path d="M0 -5 L4 -2 L4 2 Q4 5 0 7 Q-4 5 -4 2 L-4 -2 Z" fill="none" stroke="#d6d3d1" stroke-width="0.4" opacity="0.5"/>`,
+  drain:  `<circle cx="0" cy="-2" r="5" fill="none" stroke="#a855f7" stroke-width="1.2"/><path d="M-3 -5 L0 -9 L3 -5" fill="none" stroke="#a855f7" stroke-width="1.2" stroke-linecap="round"/><path d="M-3 1 L0 5 L3 1" fill="none" stroke="#a855f7" stroke-width="1.2" stroke-linecap="round"/><circle cx="0" cy="-2" r="2" fill="#a855f7" opacity="0.5"/>`,
+  blaze:  `<path d="M0 -9 Q4 -3 2 0 Q6 -2 5 3 Q4 8 0 9 Q3 5 1 3 Q-1 6 -2 9 Q-5 4 -1 1 Q-5 2 -4 -2 Q-2 -5 0 -9 Z" fill="#f97316" stroke="#fdba74" stroke-width="0.4"/>`,
+  freeze: `<line x1="0" y1="-8" x2="0" y2="8" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round"/><line x1="-7" y1="0" x2="7" y2="0" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round"/><line x1="-5" y1="-5" x2="5" y2="5" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round"/><line x1="5" y1="-5" x2="-5" y2="5" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round"/><circle cx="0" cy="0" r="2" fill="#bae6fd"/>`,
+  spread: `<circle cx="0" cy="0" r="3" fill="#f472b6"/><circle cx="-7" cy="-4" r="2" fill="#f472b6" opacity="0.7"/><circle cx="7" cy="-4" r="2" fill="#f472b6" opacity="0.7"/><circle cx="0" cy="7" r="2" fill="#f472b6" opacity="0.7"/><line x1="-5" y1="-3" x2="-2" y2="-1" stroke="#f472b6" stroke-width="0.8"/><line x1="5" y1="-3" x2="2" y2="-1" stroke="#f472b6" stroke-width="0.8"/><line x1="0" y1="3" x2="0" y2="5" stroke="#f472b6" stroke-width="0.8"/>`
+};
+
 // =========== HEXASTEAL IIFE ===========
 const HexAsteal = (function () {
   'use strict';
@@ -45,15 +147,15 @@ const HexAsteal = (function () {
   const PLAYER2 = 'player2';
   const DIRS_EVEN = [[-1,-1],[-1,0],[0,1],[1,0],[1,-1],[0,-1]];
   const DIRS_ODD  = [[-1,0],[-1,1],[0,1],[1,1],[1,0],[0,-1]];
-  const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 chars, no ambiguous O/0/I/1
+  const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
   const POWERUPS = {
-    surge:  { icon: '⚡︎' },
-    shield: { icon: '🛡' },
-    drain:  { icon: '☠︎︎' },
-    blaze:  { icon: 'ঌ' },
-    freeze: { icon: '❄' },
-    spread: { icon: '𖦹' }
+    surge:  { label: 'Surge'  },
+    shield: { label: 'Shield' },
+    drain:  { label: 'Drain'  },
+    blaze:  { label: 'Blaze'  },
+    freeze: { label: 'Freeze' },
+    spread: { label: 'Spread' }
   };
   const PU_KEYS = Object.keys(POWERUPS);
 
@@ -93,7 +195,7 @@ const HexAsteal = (function () {
   // =========== ONLINE ROOM SETTINGS ===========
   let onlineRoomSettings = { pups: 8, startHexes: 4, background: 'original' };
 
-  // =========== OPPONENT SKIN DATA (received from Firebase) ===========
+  // =========== OPPONENT SKIN DATA ===========
   let opponentSkinData = { color: 'green', design: 'none', cosmetic: 'none' };
 
   // =========== SOUND ENGINE ===========
@@ -182,21 +284,16 @@ const HexAsteal = (function () {
   const MUSIC_BOSS   = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/HexAsteal%20Boss%20Music-%5BAudioTrimmer.com%5D.mp3';
 
   const BGM = {
-    _audio: null,
-    _currentSrc: null,
-    _muted: false,
-
+    _audio: null, _currentSrc: null, _muted: false,
     play(src) {
       if (this._muted) return;
       if (this._audio && this._currentSrc === src && !this._audio.paused) return;
       if (this._audio) { this._audio.pause(); this._audio.src = ''; }
       this._audio = new Audio(src);
-      this._audio.loop = true;
-      this._audio.volume = 0.45;
+      this._audio.loop = true; this._audio.volume = 0.45;
       this._currentSrc = src;
       const tryPlay = () => this._audio.play().catch(() => {});
       tryPlay();
-      // Fallback: unlock on next user gesture if autoplay blocked
       const unlock = () => {
         if (!this._muted && this._currentSrc === src) tryPlay();
         document.removeEventListener('click', unlock);
@@ -207,25 +304,10 @@ const HexAsteal = (function () {
       document.addEventListener('keydown', unlock, { once: true });
       document.addEventListener('touchstart', unlock, { once: true });
     },
-
-    playForStage(isBossStage) {
-      this.play(isBossStage ? MUSIC_BOSS : MUSIC_NORMAL);
-    },
-
-    mute() {
-      this._muted = true;
-      if (this._audio) this._audio.pause();
-    },
-
-    unmute() {
-      this._muted = false;
-      if (this._audio && this._currentSrc) this._audio.play().catch(() => {});
-    },
-
-    toggle() {
-      if (this._muted) this.unmute(); else this.mute();
-      return !this._muted;
-    }
+    playForStage(isBossStage) { this.play(isBossStage ? MUSIC_BOSS : MUSIC_NORMAL); },
+    mute() { this._muted = true; if (this._audio) this._audio.pause(); },
+    unmute() { this._muted = false; if (this._audio && this._currentSrc) this._audio.play().catch(() => {}); },
+    toggle() { if (this._muted) this.unmute(); else this.mute(); return !this._muted; }
   };
 
   // =========== TUTORIAL ===========
@@ -248,17 +330,10 @@ const HexAsteal = (function () {
     const tier = Math.min(Math.floor((s - 1) / 10), 2);
     const p = ((s - 1) % 10) / 9;
     if (isBoss) return {
-      maxTurns: [35, 30, 28][tier],
-      eHexes: [5, 7, 9][tier],
-      ePow: [4, 5, 6][tier],
-      pPow: 4,
-      blocked: [3, 4, 4][tier],
-      pups: 6,
-      isBoss: true,
-      bossPow: [7, 8, 9][tier],
-      bossRegen: 2,
-      bossName: ['HEXAFORCE', 'HEXAFORCE II', 'HEXAFORCE SUPREME'][tier],
-      background: 'original'
+      maxTurns: [35, 30, 28][tier], eHexes: [5, 7, 9][tier], ePow: [4, 5, 6][tier], pPow: 4,
+      blocked: [3, 4, 4][tier], pups: 6, isBoss: true,
+      bossPow: [7, 8, 9][tier], bossRegen: 2,
+      bossName: ['HEXAFORCE', 'HEXAFORCE II', 'HEXAFORCE SUPREME'][tier], background: 'original'
     };
     return {
       maxTurns: Math.round(40 - tier * 4 - p * 3),
@@ -267,22 +342,16 @@ const HexAsteal = (function () {
       pPow: Math.min(3 + Math.floor(tier * 0.5), 5),
       blocked: Math.min(Math.round(4 + tier + p * 1.5), 8),
       pups: Math.max(Math.round(8 - tier - p * 1.5), 4),
-      isBoss: false, bossPow: 0, bossRegen: 1, bossName: null,
-      background: 'original'
+      isBoss: false, bossPow: 0, bossRegen: 1, bossName: null, background: 'original'
     };
   }
 
   function mpConfig(roomSettings) {
     const s = sanitizeRoomSettings(roomSettings || {});
     return {
-      maxTurns: 50,
-      eHexes: s.startHexes || 4,
-      ePow: 4,
-      pPow: 4,
-      blocked: 5,
+      maxTurns: 50, eHexes: s.startHexes || 4, ePow: 4, pPow: 4, blocked: 5,
       pups: s.pups !== undefined ? s.pups : 8,
-      isBoss: false, bossPow: 0, bossRegen: 1, bossName: null,
-      background: s.background || 'original'
+      isBoss: false, bossPow: 0, bossRegen: 1, bossName: null, background: s.background || 'original'
     };
   }
 
@@ -319,16 +388,12 @@ const HexAsteal = (function () {
   // =========== CODE GENERATION ===========
   function generateRoomCode() {
     let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-    }
+    for (let i = 0; i < 6; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
     return code;
   }
 
   function normalizeCode(str) {
-    return str.toUpperCase()
-      .replace(/O/g, '0').replace(/I/g, '1').replace(/L/g, '1')
-      .replace(/[^A-Z0-9]/g, '');
+    return str.toUpperCase().replace(/O/g, '0').replace(/I/g, '1').replace(/L/g, '1').replace(/[^A-Z0-9]/g, '');
   }
 
   // =========== SKIN HELPERS ===========
@@ -344,7 +409,6 @@ const HexAsteal = (function () {
   }
 
   // Returns SVG inner markup for a cosmetic drawn relative to hex center (0,0)
-  // Scaled to fit inside a ~28×28 area centered on the hex
   function cosmeticSVGPaths(id) {
     if (id === 'horns') return `
       <path d="M-7 -8 L-10 -20 Q-8 -17 -4 -10 Z" fill="#ef4444" stroke="#fca5a5" stroke-width="0.6"/>
@@ -358,23 +422,24 @@ const HexAsteal = (function () {
       <circle cx="0" cy="-18" r="1.5" fill="#fbbf24"/>
       <circle cx="8" cy="-16" r="1.5" fill="#fbbf24"/>
       <rect x="-8" y="-8" width="16" height="2.5" rx="0.8" fill="#fbbf24"/>`;
-    return ''; // 'none'
+    if (id === 'cowboy') return `
+      <ellipse cx="0" cy="-6" rx="10" ry="3" fill="#92400e" stroke="#78350f" stroke-width="0.8"/>
+      <path d="M-7 -6 Q-14 -3 -13 1 Q-12 3 -8 2 L-6 -4 Z" fill="#92400e" stroke="#78350f" stroke-width="0.6"/>
+      <path d="M7 -6 Q14 -3 13 1 Q12 3 8 2 L6 -4 Z" fill="#92400e" stroke="#78350f" stroke-width="0.6"/>
+      <path d="M-6 -9 Q-5 -18 0 -20 Q5 -18 6 -9 Q3 -11 0 -11 Q-3 -11 -6 -9 Z" fill="#a16207" stroke="#78350f" stroke-width="0.8"/>
+      <path d="M-4 -9 Q0 -7 4 -9" fill="none" stroke="#fbbf24" stroke-width="0.8" stroke-linecap="round"/>`;
+    return '';
   }
 
-  function getCosmeticId() {
-    return progress.equippedSkins.cosmetic || 'none';
-  }
-
-  // Legacy: kept for backward compat (unused now but safe)
+  function getCosmeticId() { return progress.equippedSkins.cosmetic || 'none'; }
   function getCosmeticMeta() { return null; }
 
-  // Get opponent skin (for online/local P2)
   function getOpponentColorSkin() {
     if (gameMode === 'online') {
       const id = opponentSkinData.color || 'green';
       return SKINS.colors.find(s => s.id === id) || SKINS.colors[0];
     }
-    return SKINS.colors[1]; // Default blue for local P2
+    return SKINS.colors[1];
   }
 
   function getOpponentDesignPatternId() {
@@ -391,7 +456,6 @@ const HexAsteal = (function () {
     return 'none';
   }
 
-  // Legacy: kept for backward compat
   function getOpponentCosmeticMeta() { return null; }
 
   function isViewerOwned(owner) {
@@ -410,8 +474,7 @@ const HexAsteal = (function () {
 
   let progress = {
     stage: 1, completed: [], tutDone: false, soundOn: true,
-    hexoneX: 0,
-    username: 'Player1',
+    hexoneX: 0, username: 'Player1',
     ownedSkins: { colors: ['green'], designs: ['none'], cosmetics: ['none'] },
     equippedSkins: { color: 'green', design: 'none', cosmetic: 'none' }
   };
@@ -421,21 +484,23 @@ const HexAsteal = (function () {
       {id: 'green',   name: 'Classic Green', price: 0,   stroke: '#22c55e', fill: '#14532d'},
       {id: 'blue',    name: 'Cyber Blue',    price: 50,  stroke: '#3b82f6', fill: '#172554'},
       {id: 'purple',  name: 'Void Purple',   price: 75,  stroke: '#a855f7', fill: '#2e1065'},
+      {id: 'crimson', name: 'Crimson Red',   price: 100, stroke: '#dc143c', fill: '#4a0010'},
       {id: 'gold',    name: 'Golden Glory',  price: 150, stroke: '#fbbf24', fill: '#92400e'},
-      {id: 'red',     name: 'crimson red',   price: 200, stroke: '#990000', fill: '#690000'},
-      {id: 'rainbow', name: 'Rainbow',       price: 300, stroke: '#ef4444', fill: '#991b1b'}
+      {id: 'rainbow', name: 'Rainbow',       price: 300, stroke: '#ef4444', fill: '#991b1b', animated: true}
     ],
     designs: [
       {id: 'none',    name: 'Plain',   price: 0},
       {id: 'stripes', name: 'Stripes', price: 100},
       {id: 'swirl',   name: 'Swirl',   price: 125},
-      {id: 'dots',    name: 'Dots',    price: 175}
+      {id: 'dots',    name: 'Dots',    price: 175},
+      {id: 'zigzag',  name: 'Zigzag',  price: 150}
     ],
     cosmetics: [
-      {id: 'none',  name: 'None',          price: 0},
-      {id: 'horns', name: 'Devil Horns',   price: 200},
-      {id: 'halo',  name: 'Angel Halo',    price: 200},
-      {id: 'crown', name: 'Victory Crown', price: 350}
+      {id: 'none',   name: 'None',          price: 0},
+      {id: 'horns',  name: 'Devil Horns',   price: 200},
+      {id: 'halo',   name: 'Angel Halo',    price: 200},
+      {id: 'crown',  name: 'Victory Crown', price: 350},
+      {id: 'cowboy', name: 'Cowboy Hat',    price: 275}
     ]
   };
 
@@ -456,25 +521,49 @@ const HexAsteal = (function () {
     updateShopButton();
   }
 
+  // =========== BUY SKIN WITH FAKE LOADER ===========
   function buySkin(type, id, price) {
     const skin = SKINS[type] && SKINS[type].find(s => s.id === id);
     if (!skin) return;
     if (!progress.ownedSkins[type]) progress.ownedSkins[type] = [];
-    if (!progress.ownedSkins[type].includes(id)) {
-      if (progress.hexoneX < price) { setStatus('Not enough HexoneX!'); return; }
-      progress.ownedSkins[type].push(id);
-      progress.hexoneX -= price;
-      saveProgress();
-      setStatus(`Bought ${skin.name}!`);
-    } else {
-      const key = type === 'colors' ? 'color' : type === 'designs' ? 'design' : 'cosmetic';
-      progress.equippedSkins[key] = id;
-      saveProgress();
-      setStatus(`Equipped ${skin.name}!`);
+
+    const isOwned = progress.ownedSkins[type].includes(id);
+    const label = isOwned ? `Equipping ${skin.name}…` : `Buying ${skin.name}…`;
+
+    // Validate purchase before showing loader
+    if (!isOwned && progress.hexoneX < price) {
+      setStatus('Not enough HexoneX!');
+      return;
     }
-    showShop();
-    updateShopButton();
-    render();
+
+    const delay = Math.random() * 2000; // 0–2 seconds
+    showShopLoader(label);
+
+    setTimeout(() => {
+      hideShopLoader();
+
+      if (!isOwned) {
+        progress.ownedSkins[type].push(id);
+        progress.hexoneX -= price;
+        saveProgress();
+        setStatus(`Bought ${skin.name}!`);
+      } else {
+        const key = type === 'colors' ? 'color' : type === 'designs' ? 'design' : 'cosmetic';
+        progress.equippedSkins[key] = id;
+        saveProgress();
+        setStatus(`Equipped ${skin.name}!`);
+      }
+
+      showShop();
+      updateShopButton();
+      render();
+
+      // Start or stop rainbow loop based on equipped color
+      if (type === 'colors') {
+        if (id === 'rainbow') startRainbowLoop();
+        else stopRainbowLoop();
+      }
+    }, delay);
   }
 
   function updateShopButton() {
@@ -483,12 +572,29 @@ const HexAsteal = (function () {
     if (bal) bal.textContent = progress.hexoneX;
   }
 
-  // SVG previews for the shop — 50×50 canvas
+  // =========== SHOP SVGs ===========
+
   function shopColorSVG(skin) {
-    // Mini hexagon shape filled with the skin color
+    const hexPts = "25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5";
+    if (skin.id === 'rainbow') {
+      // Animated rainbow using CSS hue-rotate
+      return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none" style="overflow:visible">
+        <defs>
+          <linearGradient id="rg_rainbow" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"   stop-color="#ef4444"/>
+            <stop offset="20%"  stop-color="#f97316"/>
+            <stop offset="40%"  stop-color="#eab308"/>
+            <stop offset="60%"  stop-color="#22c55e"/>
+            <stop offset="80%"  stop-color="#3b82f6"/>
+            <stop offset="100%" stop-color="#a855f7"/>
+          </linearGradient>
+        </defs>
+        <polygon points="${hexPts}" fill="url(#rg_rainbow)" stroke="#fbbf24" stroke-width="2"
+          style="animation: rainbow-hue 2s linear infinite;"/>
+      </svg>`;
+    }
     return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
-      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="${skin.fill}" stroke="${skin.stroke}" stroke-width="2.5"/>
-      ${skin.id === 'rainbow' ? `<defs><linearGradient id="rg_${skin.id}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="25%" stop-color="#f97316"/><stop offset="50%" stop-color="#22c55e"/><stop offset="75%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="url(#rg_${skin.id})" stroke="#fbbf24" stroke-width="2.5"/>` : ''}
+      <polygon points="${hexPts}" fill="${skin.fill}" stroke="${skin.stroke}" stroke-width="2.5"/>
     </svg>`;
   }
 
@@ -513,6 +619,13 @@ const HexAsteal = (function () {
         <path d="M25 14 Q38 25 25 36 Q12 25 25 14" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.4"/>
       </g>
       <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
+    if (id === 'zigzag') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <defs><clipPath id="hclip_z"><polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5"/></clipPath>
+      <pattern id="zzp" patternUnits="userSpaceOnUse" width="12" height="8">
+        <polyline points="0,8 6,0 12,8" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="1.4" stroke-linejoin="round"/>
+      </pattern></defs>
+      ${baseHex}<rect x="0" y="0" width="50" height="50" fill="url(#zzp)" clip-path="url(#hclip_z)"/>
+      <polygon points="25,4 43,14.5 43,35.5 25,46 7,35.5 7,14.5" fill="none" stroke="#374151" stroke-width="1.5"/></svg>`;
     return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">${baseHex}</svg>`;
   }
 
@@ -534,7 +647,15 @@ const HexAsteal = (function () {
       <circle cx="42" cy="22" r="3" fill="#fbbf24"/>
       <rect x="8" y="38" width="34" height="5" rx="1.5" fill="#fbbf24"/>
     </svg>`;
-    // 'none'
+    if (id === 'cowboy') return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+      <ellipse cx="25" cy="30" rx="18" ry="6" fill="#92400e" stroke="#78350f" stroke-width="1.5"/>
+      <path d="M14 28 Q6 22 7 16 Q8 12 14 14 L16 28 Z" fill="#92400e" stroke="#78350f" stroke-width="1"/>
+      <path d="M36 28 Q44 22 43 16 Q42 12 36 14 L34 28 Z" fill="#92400e" stroke="#78350f" stroke-width="1"/>
+      <path d="M15 28 Q15 12 25 10 Q35 12 35 28 Q30 24 25 24 Q20 24 15 28 Z" fill="#a16207" stroke="#78350f" stroke-width="1.5"/>
+      <path d="M17 27 Q25 22 33 27" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-linecap="round"/>
+      <rect x="17" y="26" width="16" height="3" rx="1.5" fill="#b45309"/>
+      <rect x="18" y="26.5" width="14" height="2" rx="1" fill="#fbbf24" opacity="0.6"/>
+    </svg>`;
     return `<svg width="50" height="50" viewBox="0 0 50 50" fill="none">
       <circle cx="25" cy="25" r="16" fill="#1a1a2e" stroke="#374151" stroke-width="1.5"/>
       <line x1="15" y1="15" x2="35" y2="35" stroke="#4b5563" stroke-width="2.2" stroke-linecap="round"/>
@@ -624,6 +745,8 @@ const HexAsteal = (function () {
     } catch(e) {}
     SFX.on = progress.soundOn;
     if (!progress.soundOn) BGM.mute();
+    // Restart rainbow loop if rainbow was equipped
+    if (progress.equippedSkins.color === 'rainbow') startRainbowLoop();
   }
 
   function saveProgress() {
@@ -671,7 +794,6 @@ const HexAsteal = (function () {
     if (p1Name && p2Name) {
       p1El.textContent = p1Name;
       p2El.textContent = p2Name;
-      // style p2 based on mode
       p2El.className = 'vs-name ' + (gameMode === 'local' ? 'vs-p2-blue' : 'vs-p2');
       bar.classList.remove('hidden');
     } else {
@@ -764,7 +886,6 @@ const HexAsteal = (function () {
       p2Starts.slice(0, p2Count).forEach(([r,c]) => {
         grid[r][c] = makeCell(PLAYER2, cfg.pPow + randInt(2));
       });
-      // Extra P2 starts if startHexes > 4
       if (cfg.eHexes > 4) {
         const extras = [[1,6],[0,6],[2,7],[2,8]];
         let need = cfg.eHexes - 4;
@@ -773,7 +894,6 @@ const HexAsteal = (function () {
           if (grid[r][c].owner === NEUTRAL) { grid[r][c] = makeCell(PLAYER2, cfg.pPow + randInt(2)); need--; }
         }
       }
-      // Extra P1 starts if startHexes > 4
       if (cfg.eHexes > 4) {
         const extras2 = [[4,0],[4,1],[5,2],[6,2]];
         let need2 = cfg.eHexes - 4;
@@ -814,7 +934,6 @@ const HexAsteal = (function () {
       }
     }
 
-    // Blocked hexes
     const p2Starts = [[0,7],[0,8],[1,7],[1,8]];
     let placed = 0, att = 0;
     while (placed < cfg.blocked && att < 300) {
@@ -829,7 +948,6 @@ const HexAsteal = (function () {
       placed++;
     }
 
-    // Power-ups
     const neutrals = [];
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++)
@@ -843,6 +961,7 @@ const HexAsteal = (function () {
   }
 
   // =========== SVG BOARD ===========
+  // Powerup icon element is now an SVG <g> group containing powerup SVG paths
   function createBoard() {
     const NS = 'http://www.w3.org/2000/svg';
     svgEl.innerHTML = '';
@@ -892,6 +1011,20 @@ const HexAsteal = (function () {
     swirlPat.appendChild(swirlPath);
     defs.appendChild(swirlPat);
 
+    // Zigzag pattern
+    const zigzagPat = document.createElementNS(NS, 'pattern');
+    zigzagPat.setAttribute('id', 'design-zigzag');
+    zigzagPat.setAttribute('patternUnits', 'userSpaceOnUse');
+    zigzagPat.setAttribute('width', '12'); zigzagPat.setAttribute('height', '8');
+    const zzPolyline = document.createElementNS(NS, 'polyline');
+    zzPolyline.setAttribute('points', '0,8 6,0 12,8');
+    zzPolyline.setAttribute('fill', 'none');
+    zzPolyline.setAttribute('stroke', 'rgba(255,255,255,0.2)');
+    zzPolyline.setAttribute('stroke-width', '1.4');
+    zzPolyline.setAttribute('stroke-linejoin', 'round');
+    zigzagPat.appendChild(zzPolyline);
+    defs.appendChild(zigzagPat);
+
     svgEl.appendChild(defs);
 
     for (let r = 0; r < ROWS; r++) {
@@ -922,9 +1055,10 @@ const HexAsteal = (function () {
         txt.setAttribute('x', cx); txt.setAttribute('y', cy);
         txt.setAttribute('dy', '0.05em'); txt.setAttribute('class', 'hex-text');
 
-        const puIcon = document.createElementNS(NS, 'text');
-        puIcon.setAttribute('x', cx); puIcon.setAttribute('y', cy);
-        puIcon.setAttribute('dy', '1.6em'); puIcon.setAttribute('class', 'hex-powerup-icon');
+        // Powerup icon: SVG <g> translated to correct position below number
+        const puIconGroup = document.createElementNS(NS, 'g');
+        puIconGroup.setAttribute('transform', `translate(${cx},${cy + 12})`);
+        puIconGroup.style.pointerEvents = 'none';
 
         const statusIcon = document.createElementNS(NS, 'text');
         statusIcon.setAttribute('x', cx); statusIcon.setAttribute('y', cy);
@@ -939,7 +1073,6 @@ const HexAsteal = (function () {
         designOverlay.style.fill = 'none';
         designOverlay.style.pointerEvents = 'none';
 
-        // cosmeticGroup: an SVG <g> translated to hex center, holds SVG path cosmetics
         const cosmeticGroup = document.createElementNS(NS, 'g');
         cosmeticGroup.setAttribute('transform', `translate(${cx},${cy})`);
         cosmeticGroup.style.pointerEvents = 'none';
@@ -947,13 +1080,18 @@ const HexAsteal = (function () {
         g.appendChild(poly);
         g.appendChild(designOverlay);
         g.appendChild(txt);
-        g.appendChild(puIcon);
+        g.appendChild(puIconGroup);
         g.appendChild(statusIcon);
         g.appendChild(bossIcon);
         g.appendChild(cosmeticGroup);
         svgEl.appendChild(g);
 
-        hexEls[`${r},${c}`] = { group: g, polygon: poly, text: txt, puIcon, statusIcon, bossIcon, designOverlay, cosmeticIcon: cosmeticGroup };
+        hexEls[`${r},${c}`] = {
+          group: g, polygon: poly, text: txt,
+          puIcon: puIconGroup,    // now an SVG <g>
+          statusIcon, bossIcon, designOverlay,
+          cosmeticIcon: cosmeticGroup
+        };
       }
     }
 
@@ -989,6 +1127,8 @@ const HexAsteal = (function () {
   // =========== RENDERING ===========
   function render() {
     const ao = activeOwner();
+    const isRainbow = (progress.equippedSkins.color === 'rainbow');
+
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const key = `${r},${c}`;
@@ -1019,11 +1159,17 @@ const HexAsteal = (function () {
 
         el.polygon.setAttribute('class', cls);
 
-        // Apply viewer's skin
+        // Apply viewer's skin (handles rainbow via RAF loop)
         if (isViewerOwned(cell.owner)) {
           const colorSkin = getEquippedColorSkin();
-          el.polygon.style.fill = colorSkin.fill;
-          el.polygon.style.stroke = colorSkin.stroke;
+          if (isRainbow) {
+            // Tag it for the rainbow RAF loop; initial colors set there
+            el.polygon.classList.add('hex-rainbow-cell');
+          } else {
+            el.polygon.classList.remove('hex-rainbow-cell');
+            el.polygon.style.fill = colorSkin.fill;
+            el.polygon.style.stroke = colorSkin.stroke;
+          }
 
           const patternId = getDesignPatternId();
           el.designOverlay.style.fill = patternId ? `url(#${patternId})` : 'none';
@@ -1031,9 +1177,16 @@ const HexAsteal = (function () {
           const cid = getCosmeticId();
           el.cosmeticIcon.innerHTML = cosmeticSVGPaths(cid);
         } else if (isOpponentOwned(cell.owner)) {
+          el.polygon.classList.remove('hex-rainbow-cell');
           const oppColor = getOpponentColorSkin();
-          el.polygon.style.fill = oppColor.fill;
-          el.polygon.style.stroke = oppColor.stroke;
+          const isOppRainbow = (gameMode === 'online' && opponentSkinData.color === 'rainbow') ||
+                               (gameMode === 'local' && false);
+          if (isOppRainbow) {
+            el.polygon.classList.add('hex-rainbow-cell');
+          } else {
+            el.polygon.style.fill = oppColor.fill;
+            el.polygon.style.stroke = oppColor.stroke;
+          }
 
           const oppPattern = getOpponentDesignPatternId();
           el.designOverlay.style.fill = oppPattern ? `url(#${oppPattern})` : 'none';
@@ -1041,6 +1194,7 @@ const HexAsteal = (function () {
           const ocid = getOpponentCosmeticId();
           el.cosmeticIcon.innerHTML = cosmeticSVGPaths(ocid);
         } else {
+          el.polygon.classList.remove('hex-rainbow-cell');
           el.polygon.style.fill = '';
           el.polygon.style.stroke = '';
           el.designOverlay.style.fill = 'none';
@@ -1049,13 +1203,14 @@ const HexAsteal = (function () {
 
         el.text.textContent = cell.power;
 
+        // Render powerup icon as SVG paths
         if (cell.powerup && cell.owner === NEUTRAL) {
-          el.puIcon.textContent = POWERUPS[cell.powerup].icon;
+          el.puIcon.innerHTML = POWERUP_SVG[cell.powerup] || '';
           if (!cls.includes('hex-valid-target') && !cls.includes('hex-selected'))
             el.polygon.style.filter = `url(#glow-${cell.powerup})`;
           else el.polygon.style.filter = '';
         } else {
-          el.puIcon.textContent = '';
+          el.puIcon.innerHTML = '';
           if (!cls.includes('hex-selected') && !cls.includes('hex-selectable') && !cls.includes('hex-boss'))
             el.polygon.style.filter = '';
         }
@@ -1146,10 +1301,7 @@ const HexAsteal = (function () {
   }
 
   // =========== TUTORIAL ===========
-  function showTutorial() {
-    tutStep = 0; renderTutStep();
-    tutOverlay.classList.remove('hidden');
-  }
+  function showTutorial() { tutStep = 0; renderTutStep(); tutOverlay.classList.remove('hidden'); }
   function renderTutStep() {
     const s = TUT[tutStep];
     tutIcon.textContent = s.icon; tutTitle.textContent = s.title; tutText.textContent = s.text;
@@ -1175,9 +1327,7 @@ const HexAsteal = (function () {
     progress.tutDone = true; saveProgress();
     startStage(progress.stage);
   }
-  function replayTutorial() {
-    SFX.click(); stagesOverlay.classList.add('hidden'); showTutorial();
-  }
+  function replayTutorial() { SFX.click(); stagesOverlay.classList.add('hidden'); showTutorial(); }
 
   // =========== BOSS INTRO ===========
   function showBossIntro() {
@@ -1187,9 +1337,7 @@ const HexAsteal = (function () {
     BGM.playForStage(true);
     SFX.bossIntro();
   }
-  function startBoss() {
-    SFX.click(); bossOverlay.classList.add('hidden'); generateAndPlay();
-  }
+  function startBoss() { SFX.click(); bossOverlay.classList.add('hidden'); generateAndPlay(); }
 
   // =========== STAGE SELECT ===========
   function showStages() {
@@ -1232,26 +1380,17 @@ const HexAsteal = (function () {
   function closeModeSelect() { SFX.click(); modeOverlay.classList.add('hidden'); }
 
   function selectMode(mode) {
-    SFX.click();
-    modeOverlay.classList.add('hidden');
+    SFX.click(); modeOverlay.classList.add('hidden');
     if (mode === gameMode) return;
     gameMode = mode;
-    if (mode === 'ai') {
-      cancelOnline();
-      startStage(progress.stage);
-    } else if (mode === 'local') {
-      cancelOnline();
-      startLocalGame();
-    } else if (mode === 'online') {
-      showOnlineLobby();
-    }
+    if (mode === 'ai') { cancelOnline(); startStage(progress.stage); }
+    else if (mode === 'local') { cancelOnline(); startLocalGame(); }
+    else if (mode === 'online') { showOnlineLobby(); }
   }
 
   // =========== LOCAL 2P ===========
   function startLocalGame() {
-    gameMode = 'local';
-    cfg = mpConfig();
-    localTurn = PLAYER;
+    gameMode = 'local'; cfg = mpConfig(); localTurn = PLAYER;
     hideAllOverlays();
     const diffBtn = document.getElementById('btn-ai-diff');
     const leaveBtn = document.getElementById('btn-leave-online');
@@ -1280,19 +1419,15 @@ const HexAsteal = (function () {
     localTurnBanner.classList.remove('hidden');
   }
   function dismissLocalBanner() {
-    SFX.click();
-    localTurnBanner.classList.add('hidden');
+    SFX.click(); localTurnBanner.classList.add('hidden');
     phase = 'select';
     const who = localTurn === PLAYER ? 'Player 1' : 'Player 2';
     setStatus(`${who} — select a hex to attack or transfer`);
     render();
   }
 
-  // =========== ONLINE MULTIPLAYER (Firebase) ===========
-  function showOnlineLobby() {
-    onlineOverlay.classList.remove('hidden');
-    showCreateJoin();
-  }
+  // =========== ONLINE MULTIPLAYER ===========
+  function showOnlineLobby() { onlineOverlay.classList.remove('hidden'); showCreateJoin(); }
 
   function showCreateJoin() {
     document.getElementById('online-create-join').classList.remove('hidden');
@@ -1316,29 +1451,18 @@ const HexAsteal = (function () {
     for (let i = 0; i < TOTAL; i++) {
       const el = document.getElementById(`cd${i}`);
       el.value = '';
-
       el.oninput = () => {
-        // Allow alphanumeric, uppercase
         el.value = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(-1);
         if (el.value && i < TOTAL - 1) document.getElementById(`cd${i+1}`).focus();
       };
-
       el.onkeydown = (e) => {
-        if (e.key === 'Backspace' && !el.value && i > 0) {
-          document.getElementById(`cd${i-1}`).focus();
-        }
+        if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(`cd${i-1}`).focus();
       };
-
-      // Paste handler — split across inputs
       el.onpaste = (e) => {
         e.preventDefault();
         const pasted = normalizeCode((e.clipboardData || window.clipboardData).getData('text'));
         const chars = pasted.slice(0, TOTAL).split('');
-        chars.forEach((ch, idx) => {
-          const target = document.getElementById(`cd${idx}`);
-          if (target) target.value = ch;
-        });
-        // Focus the next empty or last filled
+        chars.forEach((ch, idx) => { const t = document.getElementById(`cd${idx}`); if (t) t.value = ch; });
         const focusIdx = Math.min(chars.length, TOTAL - 1);
         const focusEl = document.getElementById(`cd${focusIdx}`);
         if (focusEl) focusEl.focus();
@@ -1368,8 +1492,7 @@ const HexAsteal = (function () {
     document.getElementById('online-back-btn').style.display = 'none';
 
     const code = generateRoomCode();
-    roomCode = code;
-    onlineSide = PLAYER;
+    roomCode = code; onlineSide = PLAYER;
     onlineRoomSettings = getOnlineRoomSettings();
 
     document.getElementById('room-code-big').textContent = code;
@@ -1380,21 +1503,14 @@ const HexAsteal = (function () {
 
     dbRef = ref(database, `rooms/${code}`);
     set(dbRef, {
-      status: 'waiting',
-      seed,
-      settings: onlineRoomSettings,
-      createdAt: Date.now(),
+      status: 'waiting', seed, settings: onlineRoomSettings, createdAt: Date.now(),
       p1_username: progress.username || 'Player1',
       p1_skin: { color: progress.equippedSkins.color, design: progress.equippedSkins.design, cosmetic: progress.equippedSkins.cosmetic }
-    }).catch(err => {
-      console.error('Create room error:', err);
-      setOnlineStatus('Failed to create room. Check connection.', 'error');
-    });
+    }).catch(err => { console.error('Create room error:', err); setOnlineStatus('Failed to create room.', 'error'); });
 
     const statusRef = ref(database, `rooms/${code}/status`);
     statusListener = onValue(statusRef, (snapshot) => {
       if (snapshot.val() === 'joined' && onlineSide === PLAYER) {
-        // Grab P2's skin before starting
         get(dbRef).then(snap => {
           const d = snap.val() || {};
           if (d.p2_skin) opponentSkinData = d.p2_skin;
@@ -1409,7 +1525,6 @@ const HexAsteal = (function () {
           }, 700);
         }).catch(() => {
           update(dbRef, { status: 'started' }).catch(console.error);
-          document.getElementById('waiting-text').textContent = 'Opponent joined! Starting…';
           setTimeout(() => {
             cleanupListeners();
             onlineOverlay.classList.add('hidden');
@@ -1424,11 +1539,7 @@ const HexAsteal = (function () {
   function onlineJoin() {
     SFX.click();
     const code = getCodeFromInputs();
-
-    if (code.length !== 6) {
-      setOnlineStatus('Enter a valid 6-character code.', 'error');
-      return;
-    }
+    if (code.length !== 6) { setOnlineStatus('Enter a valid 6-character code.', 'error'); return; }
 
     document.getElementById('online-join-form').classList.add('hidden');
     const connectingEl = document.getElementById('online-connecting');
@@ -1436,8 +1547,7 @@ const HexAsteal = (function () {
     connectingEl.innerHTML = `<p class="mode-sub">Connecting to room ${code}…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
     document.getElementById('online-back-btn').style.display = 'none';
 
-    roomCode = code;
-    onlineSide = PLAYER2;
+    roomCode = code; onlineSide = PLAYER2;
     dbRef = ref(database, `rooms/${code}`);
 
     const joinTimeout = setTimeout(() => {
@@ -1457,7 +1567,6 @@ const HexAsteal = (function () {
 
       if (data.status === 'waiting') {
         onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
-        // Read host's skin
         if (data.p1_skin) opponentSkinData = data.p1_skin;
         update(dbRef, {
           status: 'joined',
@@ -1472,11 +1581,9 @@ const HexAsteal = (function () {
 
       if (data.status === 'started') {
         onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
-        // Read host skin as opponent
         if (data.p1_skin) opponentSkinData = data.p1_skin;
         cleanupListeners();
         onlineOverlay.classList.add('hidden');
-        // Pass usernames
         const p1name = data.p1_username || 'Player1';
         const p2name = progress.username || 'Player2';
         startOnlineGame(false, data.seed, onlineRoomSettings, p1name, p2name);
@@ -1495,24 +1602,19 @@ const HexAsteal = (function () {
     document.getElementById('online-back-btn').style.display = 'none';
 
     try {
-      // Look for any open waiting room in 'matchmaking' node
       const mmRef = ref(database, 'matchmaking');
       const snap = await get(mmRef);
       const rooms = snap.val();
 
       if (rooms) {
-        // Find a room that's waiting and not ours
         const waiting = Object.entries(rooms).find(([code, data]) => data.status === 'waiting');
         if (waiting) {
           const [code, data] = waiting;
-          // Join that room
-          roomCode = code;
-          onlineSide = PLAYER2;
+          roomCode = code; onlineSide = PLAYER2;
           dbRef = ref(database, `rooms/${code}`);
           if (data.p1_skin) opponentSkinData = data.p1_skin;
           onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
 
-          // Remove from matchmaking + update room
           await set(ref(database, `matchmaking/${code}`), null);
           await update(dbRef, {
             status: 'joined',
@@ -1522,7 +1624,6 @@ const HexAsteal = (function () {
 
           connectingEl.innerHTML = `<p class="mode-sub">Found opponent! Starting…</p><div class="waiting-dots"><span></span><span></span><span></span></div>`;
 
-          // Now listen for 'started'
           roomListener = onValue(dbRef, (snapshot) => {
             const d = snapshot.val();
             if (!d) return;
@@ -1539,17 +1640,14 @@ const HexAsteal = (function () {
         }
       }
 
-      // No room found — create one and list in matchmaking
       const code = generateRoomCode();
-      roomCode = code;
-      onlineSide = PLAYER;
+      roomCode = code; onlineSide = PLAYER;
       onlineRoomSettings = getOnlineRoomSettings();
       const seed = (Date.now() & 0xffff) + Math.floor(Math.random() * 1000);
 
       dbRef = ref(database, `rooms/${code}`);
       await set(dbRef, {
-        status: 'waiting', seed, settings: onlineRoomSettings,
-        createdAt: Date.now(),
+        status: 'waiting', seed, settings: onlineRoomSettings, createdAt: Date.now(),
         p1_username: progress.username || 'Player1',
         p1_skin: { color: progress.equippedSkins.color, design: progress.equippedSkins.design, cosmetic: progress.equippedSkins.cosmetic }
       });
@@ -1562,7 +1660,6 @@ const HexAsteal = (function () {
 
       statusListener = onValue(ref(database, `rooms/${code}/status`), (snapshot) => {
         if (snapshot.val() === 'joined') {
-          // Grab P2 skin
           get(dbRef).then(snap => {
             const d = snap.val();
             if (d && d.p2_skin) opponentSkinData = d.p2_skin;
@@ -1594,7 +1691,6 @@ const HexAsteal = (function () {
     if (!roomCode) return;
     const opponentMoveKey = onlineSide === PLAYER ? 'p2_move' : 'p1_move';
     const moveRef = ref(database, `rooms/${roomCode}/${opponentMoveKey}`);
-
     moveListener = onValue(moveRef, (snapshot) => {
       const data = snapshot.val();
       if (!data || !data.msgId || data.msgId === lastSeenMsgId) return;
@@ -1606,9 +1702,7 @@ const HexAsteal = (function () {
   }
 
   function cancelOnline() {
-    cleanupListeners();
-    cleanupRematch();
-    teardownChat();
+    cleanupListeners(); cleanupRematch(); teardownChat();
     if (_disconnectListener) { try { _disconnectListener(); } catch(e){} _disconnectListener = null; }
 
     if (dbRef && roomCode && onlineSide === PLAYER) {
@@ -1616,18 +1710,14 @@ const HexAsteal = (function () {
       set(ref(database, `matchmaking/${roomCode}`), null).catch(() => {});
     }
 
-    dbRef = null;
-    roomCode = null;
-    lastSeenMsgId = null;
-    _savedRoomCode = null;
-    _savedOnlineSide = null;
+    dbRef = null; roomCode = null; lastSeenMsgId = null;
+    _savedRoomCode = null; _savedOnlineSide = null;
     sessionStorage.removeItem('hexasteal_rejoin');
 
     onlineOverlay.classList.add('hidden');
     if (gameMode === 'online') gameMode = 'ai';
     updateVSBar(null, null);
 
-    // Hide leave btn, show AI diff btn
     const leaveBtn = document.getElementById('btn-leave-online');
     const diffBtn = document.getElementById('btn-ai-diff');
     if (leaveBtn) leaveBtn.classList.add('hidden');
@@ -1657,12 +1747,8 @@ const HexAsteal = (function () {
     if (!roomCode) return;
     const myMoveKey = onlineSide === PLAYER ? 'p1_move' : 'p2_move';
     const msgId = Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-    const payload = {
-      msgId, sender: onlineSide, type: msg.type,
-      move: msg.move || null, turn, ts: Date.now()
-    };
-    update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload)
-      .catch(err => console.error('Send move failed:', err));
+    const payload = { msgId, sender: onlineSide, type: msg.type, move: msg.move || null, turn, ts: Date.now() };
+    update(ref(database, `rooms/${roomCode}/${myMoveKey}`), payload).catch(err => console.error('Send move failed:', err));
   }
 
   function handleOnlineMessage(data) {
@@ -1688,46 +1774,28 @@ const HexAsteal = (function () {
     onlineRoomSettings = sanitizeRoomSettings(roomSettings || {});
     cfg = mpConfig(onlineRoomSettings);
     hideAllOverlays();
-    turn = 1;
-    phase = 'select';
-    selectedHex = null;
-    validTargets = [];
-    transferTargets = [];
-    animating = false;
+    turn = 1; phase = 'select'; selectedHex = null; validTargets = []; transferTargets = []; animating = false;
 
     generateMapSeeded(seed || (Date.now() & 0xffff));
     createBoard();
-    SFX.stageStart();
-    BGM.playForStage(false);
-    render();
-    initChat();
+    SFX.stageStart(); BGM.playForStage(false);
+    render(); initChat();
 
-    // Save rejoin info in case of disconnect
-    _savedRoomCode = roomCode;
-    _savedOnlineSide = onlineSide;
+    _savedRoomCode = roomCode; _savedOnlineSide = onlineSide;
     sessionStorage.setItem('hexasteal_rejoin', JSON.stringify({ roomCode, onlineSide, seed: seed || 0 }));
 
-    // Show leave button, hide AI diff button
     const diffBtn = document.getElementById('btn-ai-diff');
     const leaveBtn = document.getElementById('btn-leave-online');
     if (diffBtn) diffBtn.classList.add('hidden');
     if (leaveBtn) leaveBtn.classList.remove('hidden');
 
-    // Update VS bar
     const myName = progress.username || (onlineSide === PLAYER ? 'Player1' : 'Player2');
     const oppName = (onlineSide === PLAYER ? (p2name || 'Player2') : (p1name || 'Player1'));
-    if (onlineSide === PLAYER) {
-      updateVSBar(myName, oppName);
-    } else {
-      updateVSBar(p1name || 'Player1', myName);
-    }
+    if (onlineSide === PLAYER) updateVSBar(myName, oppName);
+    else updateVSBar(p1name || 'Player1', myName);
 
-    if (onlineSide === PLAYER) {
-      setStatus('Your turn (P1) — select a hex to attack or transfer');
-    } else {
-      phase = 'wait-online';
-      setStatus('Waiting for P1 to move…');
-    }
+    if (onlineSide === PLAYER) setStatus('Your turn (P1) — select a hex to attack or transfer');
+    else { phase = 'wait-online'; setStatus('Waiting for P1 to move…'); }
     render();
     setupDisconnectDetection();
   }
@@ -1736,10 +1804,8 @@ const HexAsteal = (function () {
   function initChat() {
     const panel = document.getElementById('chat-panel');
     if (!panel) return;
-    panel.classList.remove('hidden');
-    panel.classList.add('collapsed');
-    chatOpen = false;
-    unreadCount = 0;
+    panel.classList.remove('hidden'); panel.classList.add('collapsed');
+    chatOpen = false; unreadCount = 0;
     document.getElementById('chat-messages').innerHTML = '';
     appendSystemMsg('Chat connected · say hi!');
 
@@ -1774,8 +1840,7 @@ const HexAsteal = (function () {
         if (!chatOpen) {
           unreadCount += added;
           const badge = document.getElementById('chat-unread');
-          badge.textContent = unreadCount;
-          badge.classList.remove('hidden');
+          badge.textContent = unreadCount; badge.classList.remove('hidden');
         }
       }
     });
@@ -1802,8 +1867,7 @@ const HexAsteal = (function () {
     if (chatOpen) {
       unreadCount = 0;
       const badge = document.getElementById('chat-unread');
-      badge.classList.add('hidden');
-      badge.textContent = '0';
+      badge.classList.add('hidden'); badge.textContent = '0';
       setTimeout(() => {
         const container = document.getElementById('chat-messages');
         if (container) container.scrollTop = container.scrollHeight;
@@ -1817,8 +1881,7 @@ const HexAsteal = (function () {
     const input = document.getElementById('chat-input');
     const text = (input.value || '').trim();
     if (!text) return;
-    input.value = '';
-    SFX.click();
+    input.value = ''; SFX.click();
     const key = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     set(ref(database, `rooms/${roomCode}/chat/${key}`), {
       sender: onlineSide, text: text.slice(0, 80), ts: Date.now()
@@ -1832,8 +1895,7 @@ const HexAsteal = (function () {
       try { off(ref(database, `rooms/${roomCode}/chat`)); } catch (e) {}
       chatListener = null;
     }
-    chatOpen = false;
-    unreadCount = 0;
+    chatOpen = false; unreadCount = 0;
   }
 
   // =========== REMATCH ===========
@@ -1848,8 +1910,7 @@ const HexAsteal = (function () {
 
     title.textContent = iWon ? 'You Won!' : 'You Lost!';
     sub.textContent   = 'Waiting for opponent…';
-    yesBtn.disabled   = false;
-    noBtn.disabled    = false;
+    yesBtn.disabled = false; noBtn.disabled = false;
     dots.classList.add('hidden');
     overlay.classList.remove('hidden');
 
@@ -1884,30 +1945,24 @@ const HexAsteal = (function () {
           }
         }
       } else if (myVote === false || oppVote === false) {
-        cleanupRematch();
-        overlay.classList.add('hidden');
-        cancelOnline();
+        cleanupRematch(); overlay.classList.add('hidden'); cancelOnline();
       }
     });
 
     rematchTimeout = setTimeout(() => {
-      cleanupRematch();
-      overlay.classList.add('hidden');
-      appendSystemMsg('Rematch timed out.');
-      cancelOnline();
+      cleanupRematch(); overlay.classList.add('hidden');
+      appendSystemMsg('Rematch timed out.'); cancelOnline();
     }, 30000);
   }
 
   function voteRematch(yes) {
     if (rematchVoted) return;
-    rematchVoted = true;
-    SFX.click();
+    rematchVoted = true; SFX.click();
     const yesBtn = document.getElementById('btn-rematch-yes');
     const noBtn  = document.getElementById('btn-rematch-no');
     const sub    = document.getElementById('rematch-sub');
     const dots   = document.getElementById('rematch-dots');
-    yesBtn.disabled = true;
-    noBtn.disabled  = true;
+    yesBtn.disabled = true; noBtn.disabled = true;
     update(ref(database, `rooms/${roomCode}`), { [`rematch_${onlineSide}`]: yes }).catch(console.error);
     if (yes) { sub.textContent = 'Waiting for opponent…'; dots.classList.remove('hidden'); }
     else { sub.textContent = 'Leaving…'; }
@@ -1948,17 +2003,14 @@ const HexAsteal = (function () {
     pStarts.forEach(([r,c])  => { grid[r][c] = makeCell(PLAYER,  cfg.pPow + seededRand(2)); });
     p2Starts.forEach(([r,c]) => { grid[r][c] = makeCell(PLAYER2, cfg.pPow + seededRand(2)); });
 
-    // Extra starts based on cfg.eHexes
     if (cfg.eHexes > 4) {
       const extras1 = [[4,0],[4,1],[5,2],[6,2]];
       const extras2 = [[1,6],[0,6],[2,7],[2,8]];
       let need = cfg.eHexes - 4;
-      for (let i = 0; i < need && i < extras1.length; i++) {
+      for (let i = 0; i < need && i < extras1.length; i++)
         grid[extras1[i][0]][extras1[i][1]] = makeCell(PLAYER, cfg.pPow + seededRand(2));
-      }
-      for (let i = 0; i < need && i < extras2.length; i++) {
+      for (let i = 0; i < need && i < extras2.length; i++)
         grid[extras2[i][0]][extras2[i][1]] = makeCell(PLAYER2, cfg.pPow + seededRand(2));
-      }
     }
 
     let placed = 0, att = 0;
@@ -1969,8 +2021,7 @@ const HexAsteal = (function () {
       const nearP  = pStarts.some(([sr,sc])  => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
       const nearP2 = p2Starts.some(([sr,sc]) => Math.abs(r-sr)+Math.abs(c-sc) <= 2);
       if (nearP || nearP2) continue;
-      grid[r][c] = makeCell(BLOCKED, 0);
-      placed++;
+      grid[r][c] = makeCell(BLOCKED, 0); placed++;
     }
 
     const neutrals = [];
@@ -2012,30 +2063,23 @@ const HexAsteal = (function () {
         dst.owner = src.owner; dst.power = Math.min(aPow - dPow, MAX_POWER);
         src.power = 1; dst.powerup = null; dst.shielded = false;
         dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
-        flashHex(move.dr, move.dc, 'flash-ai-capture', 550);
-        SFX.attack();
+        flashHex(move.dr, move.dc, 'flash-ai-capture', 550); SFX.attack();
         if (capPU) applyPowerup(capPU, move.dr, move.dc, src.owner);
         setStatus(`Opponent captured! (${aPow} vs ${dPow})`);
       } else if (aPow === dPow) {
-        src.power = Math.max(1, src.power - 1);
-        setStatus('Opponent tied!');
+        src.power = Math.max(1, src.power - 1); setStatus('Opponent tied!');
       } else {
-        src.power = 1; if (dst.power > 1) dst.power -= 1;
-        setStatus('Opponent attack failed!');
+        src.power = 1; if (dst.power > 1) dst.power -= 1; setStatus('Opponent attack failed!');
       }
       render();
       setTimeout(() => { animating = false; if (!checkGameOver()) afterOpponentTurn(); }, 700);
     }
   }
 
-  function applyRemoteSkip() {
-    setStatus('Opponent skipped.');
-    afterOpponentTurn();
-  }
+  function applyRemoteSkip() { setStatus('Opponent skipped.'); afterOpponentTurn(); }
 
   function afterOpponentTurn() {
-    turn++;
-    growPhaseOwner(onlineSide);
+    turn++; growPhaseOwner(onlineSide);
     phase = 'select';
     const label = onlineSide === PLAYER ? 'P1' : 'P2';
     setStatus(`Your turn (${label}) — select a hex`);
@@ -2044,29 +2088,20 @@ const HexAsteal = (function () {
 
   function setOnlineStatus(msg, type) {
     const waiting = document.getElementById('waiting-text');
-    if (waiting) {
-      waiting.textContent = msg;
-      waiting.style.color = type === 'error' ? '#f87171' : '';
-    }
+    if (waiting) { waiting.textContent = msg; waiting.style.color = type === 'error' ? '#f87171' : ''; }
   }
 
   function copyRoomCode() {
-    if (roomCode) {
-      navigator.clipboard.writeText(roomCode).catch(() => {});
-      SFX.click();
-    }
+    if (roomCode) { navigator.clipboard.writeText(roomCode).catch(() => {}); SFX.click(); }
   }
 
   // =========== LEAVE ONLINE GAME ===========
   function leaveOnlineGame() {
     SFX.click();
     if (gameMode !== 'online') return;
-    // Use intentional_left so opponent knows this was a deliberate leave,
-    // NOT a refresh/disconnect. declineRejoin does NOT set this flag.
     if (dbRef && roomCode) {
       update(ref(database, `rooms/${roomCode}`), {
-        [`${onlineSide}_intentional_left`]: true,
-        status: 'abandoned'
+        [`${onlineSide}_intentional_left`]: true, status: 'abandoned'
       }).catch(() => {});
     }
     sessionStorage.removeItem('hexasteal_rejoin');
@@ -2081,14 +2116,11 @@ const HexAsteal = (function () {
     const oppLeftRef = ref(database, `rooms/${roomCode}/${oppSide}_intentional_left`);
     if (_disconnectListener) { try { off(oppLeftRef); } catch(e){} }
     _disconnectListener = onValue(oppLeftRef, (snap) => {
-      // Only fire when opponent explicitly pressed Leave — NOT when they refreshed and declined rejoin
       if (snap.val() === true && gameMode === 'online') {
         sessionStorage.removeItem('hexasteal_rejoin');
-        teardownChat();
-        cleanupListeners();
+        teardownChat(); cleanupListeners();
         if (_disconnectListener) { try { off(oppLeftRef); } catch(e){} _disconnectListener = null; }
-        gameMode = 'ai';
-        updateVSBar(null, null);
+        gameMode = 'ai'; updateVSBar(null, null);
         const leaveBtn = document.getElementById('btn-leave-online');
         const diffBtn = document.getElementById('btn-ai-diff');
         if (leaveBtn) leaveBtn.classList.add('hidden');
@@ -2112,14 +2144,11 @@ const HexAsteal = (function () {
     try {
       const data = JSON.parse(saved);
       if (!data || !data.roomCode) return;
-      // Show reconnect popup
       _savedRoomCode = data.roomCode;
       _savedOnlineSide = data.onlineSide || PLAYER;
       const overlay = document.getElementById('disconnect-overlay');
       if (overlay) overlay.classList.remove('hidden');
-    } catch(e) {
-      sessionStorage.removeItem('hexasteal_rejoin');
-    }
+    } catch(e) { sessionStorage.removeItem('hexasteal_rejoin'); }
   }
 
   function rejoinRoom() {
@@ -2127,10 +2156,8 @@ const HexAsteal = (function () {
     document.getElementById('disconnect-overlay').classList.add('hidden');
     if (!_savedRoomCode) { startStage(progress.stage); return; }
 
-    const code = _savedRoomCode;
-    const side = _savedOnlineSide || PLAYER;
-    roomCode = code;
-    onlineSide = side;
+    const code = _savedRoomCode, side = _savedOnlineSide || PLAYER;
+    roomCode = code; onlineSide = side;
     dbRef = ref(database, `rooms/${code}`);
 
     const connectingEl = document.getElementById('online-connecting');
@@ -2154,7 +2181,6 @@ const HexAsteal = (function () {
       if (data.p2_skin && side === PLAYER)  opponentSkinData = data.p2_skin;
       onlineRoomSettings = sanitizeRoomSettings(data.settings || {});
 
-      // Signal we're back
       update(dbRef, { [`${side}_reconnected`]: true }).catch(console.error);
 
       onlineOverlay.classList.add('hidden');
@@ -2172,32 +2198,25 @@ const HexAsteal = (function () {
 
   function declineRejoin() {
     SFX.click();
-    // Write a neutral "declined" flag — does NOT set intentional_left,
-    // so the opponent's disconnect listener will NOT fire.
-    // The opponent simply stays in-game waiting, which is correct —
-    // they're not kicked out just because someone refreshed and chose not to rejoin.
     if (_savedRoomCode && _savedOnlineSide) {
       const declinedRef = ref(database, `rooms/${_savedRoomCode}/${_savedOnlineSide}_declined_rejoin`);
       set(declinedRef, true).catch(() => {});
     }
     sessionStorage.removeItem('hexasteal_rejoin');
-    _savedRoomCode = null;
-    _savedOnlineSide = null;
+    _savedRoomCode = null; _savedOnlineSide = null;
     document.getElementById('disconnect-overlay').classList.add('hidden');
   }
 
   // =========== STAGE MANAGEMENT ===========
   function startStage(s) {
     hideAllOverlays();
-    gameMode = 'ai';
-    currentStage = s; cfg = stageConfig(s);
+    gameMode = 'ai'; currentStage = s; cfg = stageConfig(s);
     updateVSBar(null, null);
     const diffBtn = document.getElementById('btn-ai-diff');
     const leaveBtn = document.getElementById('btn-leave-online');
     if (diffBtn) diffBtn.classList.remove('hidden');
     if (leaveBtn) leaveBtn.classList.add('hidden');
     updateDiffButton();
-    // Play normal music now; boss music starts when boss fight begins
     if (!cfg.isBoss) BGM.playForStage(false);
     if (cfg.isBoss) showBossIntro();
     else generateAndPlay();
@@ -2206,23 +2225,13 @@ const HexAsteal = (function () {
   function generateAndPlay() {
     turn = 1; phase = 'select';
     selectedHex = null; validTargets = []; transferTargets = []; animating = false;
-
     if (gameMode === 'local') localTurn = PLAYER;
-
-    generateMap();
-    createBoard();
-    if (gameMode === 'local') {
-      growPhaseOwner(PLAYER);
-      growPhaseOwner(PLAYER2);
-    } else {
-      growPhase(PLAYER);
-    }
-    SFX.stageStart();
-    render();
-
-    if (gameMode === 'local') {
-      showLocalTurnBanner();
-    } else if (gameMode === 'ai') {
+    generateMap(); createBoard();
+    if (gameMode === 'local') { growPhaseOwner(PLAYER); growPhaseOwner(PLAYER2); }
+    else { growPhase(PLAYER); }
+    SFX.stageStart(); render();
+    if (gameMode === 'local') showLocalTurnBanner();
+    else if (gameMode === 'ai') {
       setStatus(cfg.isBoss
         ? `Boss battle! Defeat ${cfg.bossName}!`
         : 'Your hexes grew +1 · select a hex to attack or transfer');
@@ -2240,8 +2249,7 @@ const HexAsteal = (function () {
   }
 
   function nextStage() {
-    SFX.click();
-    goOverlay.classList.add('hidden');
+    SFX.click(); goOverlay.classList.add('hidden');
     if (gameMode !== 'ai') { startLocalGame(); return; }
     if (currentStage >= TOTAL_STAGES) showStages();
     else startStage(currentStage + 1);
@@ -2307,9 +2315,7 @@ const HexAsteal = (function () {
 
   function deselect() {
     selectedHex = null; validTargets = []; transferTargets = []; phase = 'select';
-    SFX.deselect();
-    setStatus('Select a hex to attack or transfer power');
-    render();
+    SFX.deselect(); setStatus('Select a hex to attack or transfer power'); render();
   }
 
   // =========== TRANSFER ===========
@@ -2339,8 +2345,7 @@ const HexAsteal = (function () {
 
   // =========== COMBAT ===========
   function executeAttack(sr, sc, dr, dc) {
-    animating = true;
-    SFX.attack();
+    animating = true; SFX.attack();
     const src = grid[sr][sc], dst = grid[dr][dc];
     let aPow = src.power;
     const wasBlazed = src.blazeBuffed;
@@ -2391,17 +2396,11 @@ const HexAsteal = (function () {
       beginAITurn();
     } else if (gameMode === 'local') {
       localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
-      growPhaseOwner(localTurn);
-      turn++;
-      phase = 'select';
-      render();
-      showLocalTurnBanner();
+      growPhaseOwner(localTurn); turn++;
+      phase = 'select'; render(); showLocalTurnBanner();
     } else if (gameMode === 'online') {
-      growPhaseOwner(opponentOwner());
-      turn++;
-      phase = 'wait-online';
-      setStatus('Waiting for opponent…');
-      render();
+      growPhaseOwner(opponentOwner()); turn++;
+      phase = 'wait-online'; setStatus('Waiting for opponent…'); render();
     }
   }
 
@@ -2482,9 +2481,7 @@ const HexAsteal = (function () {
 
   // =========== AI ===========
   function beginAITurn() {
-    phase = 'ai';
-    setStatus('Enemy is thinking…');
-    render();
+    phase = 'ai'; setStatus('Enemy is thinking…'); render();
     setTimeout(() => { growPhase(ENEMY); render(); setTimeout(aiAttack, 400); }, 450);
   }
 
@@ -2504,7 +2501,6 @@ const HexAsteal = (function () {
     }
 
     let best = null, bestScore = -Infinity;
-    // Aggression scaled by stage AND difficulty
     const diffAggression = { normal: 0, hard: 20, intense: 45, extreme: 80, easy: -20 };
     const aggression = Math.min(currentStage * 2, 40) + (diffAggression[diff.id] || 0);
     for (const a of attacks) {
@@ -2522,14 +2518,12 @@ const HexAsteal = (function () {
         }
       } else if (diff2 === 0) score = -30;
       else score = -100;
-      // More randomFactor = dumber AI
       score += Math.random() * diff.randomFactor;
       if (score > bestScore) { bestScore = score; best = a; }
     }
 
     if (best && bestScore > diff.scoreThresh) {
-      flashHex(best.sr, best.sc, 'flash-ai-source', 400);
-      SFX.aiMove();
+      flashHex(best.sr, best.sc, 'flash-ai-source', 400); SFX.aiMove();
       setTimeout(() => {
         const src = grid[best.sr][best.sc], dst = grid[best.dr][best.dc];
         let aPow = src.power;
@@ -2544,17 +2538,14 @@ const HexAsteal = (function () {
           dst.owner = ENEMY; dst.power = Math.min(aPow-dPow, MAX_POWER);
           src.power = 1; dst.powerup = null; dst.shielded = false;
           dst.blazeBuffed = false; dst.frozen = false;
-          flashHex(best.dr, best.dc, 'flash-ai-capture', 500);
-          SFX.attack();
+          flashHex(best.dr, best.dc, 'flash-ai-capture', 500); SFX.attack();
           let msg = `Enemy captured! (${wasBlazed ? aPow+' 2x' : aPow} vs ${wasShielded ? dPow+' shield' : dPow})`;
           if (capPU) msg += ' · ' + applyPowerup(capPU, best.dr, best.dc, ENEMY);
           setStatus(msg);
         } else if (aPow === dPow) {
-          src.power = Math.max(1, src.power-1);
-          setStatus('Enemy tied!');
+          src.power = Math.max(1, src.power-1); setStatus('Enemy tied!');
         } else {
-          src.power = 1; if (dst.power>1) dst.power-=1;
-          setStatus('Enemy failed!');
+          src.power = 1; if (dst.power>1) dst.power-=1; setStatus('Enemy failed!');
         }
         render();
         setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 550);
@@ -2669,8 +2660,7 @@ const HexAsteal = (function () {
 
   function showEnd(title, desc, type) {
     phase = 'gameover';
-    resultTitle.textContent = title;
-    resultTitle.className = type;
+    resultTitle.textContent = title; resultTitle.className = type;
     resultDesc.textContent = desc;
 
     if (type === 'win') {
@@ -2681,24 +2671,14 @@ const HexAsteal = (function () {
         : 'Play Again';
       btnNext.classList.remove('hidden');
     } else if (type === 'draw') {
-      SFX.defeat();
-      btnNext.textContent = 'Play Again';
-      btnNext.classList.remove('hidden');
+      SFX.defeat(); btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
     } else {
       SFX.defeat();
-      if (gameMode !== 'ai') {
-        btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
-      } else {
-        btnNext.classList.add('hidden');
-      }
+      if (gameMode !== 'ai') { btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden'); }
+      else { btnNext.classList.add('hidden'); }
     }
 
-    if (gameMode === 'online') {
-      goOverlay.classList.add('hidden');
-      showRematch(type === 'win');
-      return;
-    }
-
+    if (gameMode === 'online') { goOverlay.classList.add('hidden'); showRematch(type === 'win'); return; }
     goOverlay.classList.remove('hidden');
     setStatus(title); render();
   }
@@ -2708,26 +2688,17 @@ const HexAsteal = (function () {
   // =========== SKIP ATTACK ===========
   function skipAttack() {
     if (animating || (phase !== 'select' && phase !== 'target')) return;
-    SFX.click();
-    selectedHex = null; validTargets = []; transferTargets = [];
-
+    SFX.click(); selectedHex = null; validTargets = []; transferTargets = [];
     if (gameMode === 'online') sendOnline({ type: 'skip' });
-
-    setStatus('Skipped…');
-    render();
+    setStatus('Skipped…'); render();
     setTimeout(() => {
-      if (gameMode === 'ai') {
-        beginAITurn();
-      } else if (gameMode === 'local') {
+      if (gameMode === 'ai') { beginAITurn(); }
+      else if (gameMode === 'local') {
         localTurn = localTurn === PLAYER ? PLAYER2 : PLAYER;
-        growPhaseOwner(localTurn); turn++;
-        phase = 'select'; render();
-        showLocalTurnBanner();
+        growPhaseOwner(localTurn); turn++; phase = 'select'; render(); showLocalTurnBanner();
       } else if (gameMode === 'online') {
-        growPhaseOwner(opponentOwner());
-        turn++;
-        phase = 'wait-online';
-        setStatus('Waiting for opponent…'); render();
+        growPhaseOwner(opponentOwner()); turn++;
+        phase = 'wait-online'; setStatus('Waiting for opponent…'); render();
       }
     }, 300);
   }
@@ -2742,9 +2713,7 @@ const HexAsteal = (function () {
         iconEl.innerHTML = '<path d="M2 5H5L9 2V12L5 9H2V5Z" fill="#d1d5db"/><line x1="11" y1="4" x2="14" y2="10" stroke="#f87171" stroke-width="1.2" stroke-linecap="round"/><line x1="14" y1="4" x2="11" y2="10" stroke="#f87171" stroke-width="1.2" stroke-linecap="round"/>';
       }
     }
-    // Sync BGM with SFX toggle
-    if (SFX.on) { BGM.unmute(); SFX.click(); }
-    else { BGM.mute(); }
+    if (SFX.on) { BGM.unmute(); SFX.click(); } else { BGM.mute(); }
   }
 
   // =========== INIT ===========
@@ -2795,8 +2764,6 @@ const HexAsteal = (function () {
     updateShopButton();
     updateUsernameDisplay();
     updateDiffButton();
-
-    // Check if player was in an online game and got disconnected
     checkRejoinOnLoad();
 
     if (!progress.tutDone) showTutorial();
