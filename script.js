@@ -3700,7 +3700,7 @@ window.HexAsteal = HexAsteal;
   'use strict';
 
   const ADMIN_CODE = '1100=-0987654321234567890-=';
-  const OWNER_CODE = '1010=-0987654321234567890-=';
+  const OWNER_CODE = '0987654321234567890-=121212';
   let _buf = '';
 
   window._hexAdminMode = false;
