@@ -925,34 +925,31 @@ const HexAsteal = (function () {
   }
 
   // =========== USERNAME ===========
-  function showUsernameEdit() {
+function showUsernameEdit() {
     SFX.click();
     const overlay = document.getElementById('username-overlay');
     const input = document.getElementById('username-input');
     if (input) {
-      const cur = progress.username || '';
-      const adjPart = cur.replace(/Hex\d+$/, '');
-      input.value = adjPart || cur;
-      input.placeholder = 'Enter prefix (e.g. Swift)';
+      input.value = progress.username || '';
+      input.placeholder = 'Enter username…';
+      input.maxLength = 20;
     }
     const descEl = overlay.querySelector('p');
-    if (descEl) descEl.textContent = 'Choose a prefix — a unique number is auto-added (e.g. SwiftHex482). No two players share the same name.';
+    if (descEl) descEl.textContent = 'Choose a unique username (3–20 characters). No two players share the same name.';
     overlay.classList.remove('hidden');
     setTimeout(() => input && input.focus(), 50);
   }
 
-  function saveUsername() {
+function saveUsername() {
     SFX.click();
     const input = document.getElementById('username-input');
-    const raw = (input.value || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 10);
-    if (raw.length < 1) { setStatus('Enter a prefix!'); return; }
+    const raw = (input.value || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20);
+    if (raw.length < 3) { setStatus('Username must be at least 3 characters!'); return; }
 
     const btnSave = document.querySelector('#username-overlay .btn-primary');
     if (btnSave) { btnSave.disabled = true; btnSave.textContent = 'Checking…'; }
 
-    const desired = raw + 'Hex' + String(Math.floor(Math.random() * 900) + 100);
-
-    claimUsername(desired).then(accepted => {
+    claimUsername(raw).then(accepted => {
       progress.username = accepted;
       saveProgress();
       updateUsernameDisplay();
