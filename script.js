@@ -864,10 +864,10 @@ const HexAsteal = (function () {
     'Daring','Crisp','Subtle','Flash','Noble','Quick','Vivid','Solid','Prime','True'
   ];
 
-  function generateRandomUsername() {
+function generateRandomUsername() {
     const adj = USERNAME_ADJECTIVES[Math.floor(Math.random() * USERNAME_ADJECTIVES.length)];
     const num = String(Math.floor(Math.random() * 900) + 100);
-    return `${adj}Hex${num}`;
+    return `${adj}${num}`;
   }
 
   async function claimUsername(desired) {
