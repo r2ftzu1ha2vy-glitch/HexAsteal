@@ -3031,15 +3031,6 @@ async function adminGiveOppHexoneX(targetUsername) {
   setStatus(`[ADMIN] ${targetUsername} not in a room — HexoneX queued in their inbox`);
 }
 
-    if (gameMode !== 'online' || !roomCode) { setStatus('[ADMIN] Online only (or provide a username)!'); return; }
-    const oppSide = onlineSide === 'player' ? 'player2' : 'player';
-    const oppKey = `admin_opp_hexonex_${oppSide}`;
-    update(ref(database, `rooms/${roomCode}`), {
-      [oppKey]: { amount: amt, ts: Date.now() }
-    }).catch(console.error);
-    setStatus(`[ADMIN] Sent ${amt} HexoneX to opponent`);
-  }
-
   function adminMaxOppHexes() {
     const oppOwner = (gameMode === 'online') ? onlineOpponentSide()
                     : (gameMode === 'local')  ? PLAYER2 : ENEMY;
@@ -3213,6 +3204,18 @@ async function adminGiveOppHexoneX(targetUsername) {
         saveProgress(); updateShopButton();
         setStatus(`[ADMIN GIFT] +${amt} HexoneX received!`);
       }
+      // Check personal inbox on game start
+const inboxRef = ref(database, `user_inbox/${progress.username}/hexonex`);
+get(inboxRef).then(snap => {
+  const d = snap.val();
+  if (!d || !d.amount || !d.ts) return;
+  const age = Date.now() - d.ts;
+  if (age > 7 * 24 * 60 * 60 * 1000) { set(inboxRef, null); return; } // expire after 7 days
+  progress.hexoneX += d.amount;
+  saveProgress(); updateShopButton();
+  setStatus(`[GIFT] +${d.amount} HexoneX from ${d.from || 'admin'} received!`);
+  set(inboxRef, null); // clear after claiming
+}).catch(() => {});
     });
   }
 
