@@ -15,6 +15,15 @@ const firebaseConfig = {
 const _app = initializeApp(firebaseConfig);
 const database = getDatabase(_app);
 
+function getDeviceId() {
+  let id = localStorage.getItem('hexasteal_device_id');
+  if (!id) {
+    id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('hexasteal_device_id', id);
+  }
+  return id;
+}
+const DEVICE_ID = getDeviceId();
 // =========== FIREBASE STATE ===========
 let dbRef = null;
 let roomCode = null;
@@ -902,10 +911,33 @@ const BOSS_CONFIGS = {
     SFX.on = progress.soundOn;
     if (!progress.soundOn) BGM.mute();
     if (progress.equippedSkins.color === 'rainbow') startRainbowLoop();
+    // Sync user record to Firebase
+    syncUserRecord();
   }
 
-  function saveProgress() {
+function syncUserRecord() {
+    const userRef = ref(database, `users/${DEVICE_ID}`);
+    const record = {
+      username: progress.username || '',
+      hexoneX: progress.hexoneX || 0,
+      stage: progress.stage || 1,
+      equippedSkins: progress.equippedSkins || {},
+      lastSeen: Date.now()
+    };
+    set(userRef, record).catch(() => {});
+  }
+  
+function saveProgress() {
     localStorage.setItem(SAVE_KEY, JSON.stringify(progress));
+    // Sync key fields to Firebase user record
+    const userRef = ref(database, `users/${DEVICE_ID}`);
+    update(userRef, {
+      username: progress.username || '',
+      hexoneX: progress.hexoneX || 0,
+      stage: progress.stage || 1,
+      equippedSkins: progress.equippedSkins || {},
+      lastSeen: Date.now()
+    }).catch(() => {});
   }
 
   // =========== USERNAME SYSTEM ===========
@@ -929,22 +961,24 @@ async function claimUsername(desired) {
       const usernameRef = ref(database, `usernames/${name}`);
       try {
         const snap = await get(usernameRef);
-        // Available if it doesn't exist, or if we already own it
-        if (!snap.exists() || snap.val()?.owner === progress.username) {
+        const data = snap.val();
+        // Free if doesn't exist, or owned by this device
+        if (!snap.exists() || data?.deviceId === DEVICE_ID) {
+          // Release old username index if changing
           if (progress.username && progress.username !== name) {
             set(ref(database, `usernames/${progress.username}`), null).catch(() => {});
           }
-          await set(usernameRef, { claimedAt: Date.now(), owner: name });
+          await set(usernameRef, { deviceId: DEVICE_ID, claimedAt: Date.now() });
           return name;
         }
-        return null;
+        return null; // taken by another device
       } catch(e) { return name; }
     };
 
     const exact = await tryName(clean);
     if (exact) return exact;
 
-    // Only reach here if name is genuinely taken by someone else
+    // Taken — try suffixed versions
     for (let i = 0; i < 10; i++) {
       const suffix = String(Math.floor(Math.random() * 900) + 100);
       const candidate = clean.slice(0, 17) + suffix;
