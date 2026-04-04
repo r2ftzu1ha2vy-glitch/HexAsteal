@@ -921,38 +921,42 @@ function generateRandomUsername() {
     return `${adj}${num}`;
   }
 
-  async function claimUsername(desired) {
-    const clean = desired.trim().slice(0, 16);
-    if (!clean) return generateRandomUsername();
+async function claimUsername(desired) {
+    const clean = desired.trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20);
+    if (clean.length < 3) return generateRandomUsername();
 
-    const usernameRef = ref(database, `usernames/${clean}`);
-    try {
-      const snap = await get(usernameRef);
-      if (!snap.exists()) {
-        if (progress.username && progress.username !== clean) {
-          set(ref(database, `usernames/${progress.username}`), null).catch(() => {});
-        }
-        await set(usernameRef, { claimedAt: Date.now(), prev: progress.username || '' });
-        return clean;
-      } else {
-        let attempt = clean.slice(0, 12);
-        for (let tries = 0; tries < 10; tries++) {
-          const suf = String(Math.floor(Math.random() * 900) + 100);
-          const candidate = attempt + suf;
-          const cs = await get(ref(database, `usernames/${candidate}`));
-          if (!cs.exists()) {
-            if (progress.username && progress.username !== candidate) {
-              set(ref(database, `usernames/${progress.username}`), null).catch(() => {});
-            }
-            await set(ref(database, `usernames/${candidate}`), { claimedAt: Date.now(), prev: progress.username || '' });
-            return candidate;
+    const tryClaimName = async (name) => {
+      const usernameRef = ref(database, `usernames/${name}`);
+      try {
+        const snap = await get(usernameRef);
+        if (!snap.exists()) {
+          // Release old username first
+          if (progress.username && progress.username !== name) {
+            await set(ref(database, `usernames/${progress.username}`), null).catch(() => {});
           }
+          await set(usernameRef, { claimedAt: Date.now(), owner: progress.username || '' });
+          // Verify we actually got it (re-read to confirm no race)
+          const verify = await get(usernameRef);
+          if (verify.exists() && verify.val().claimedAt) return name;
         }
-        return clean + Math.floor(Math.random() * 9000 + 1000);
-      }
-    } catch(e) {
-      return clean;
+        return null;
+      } catch(e) { return null; }
+    };
+
+    // Try exact name first
+    const exact = await tryClaimName(clean);
+    if (exact) return exact;
+
+    // Name taken — try up to 10 suffixed variants
+    for (let i = 0; i < 10; i++) {
+      const suffix = String(Math.floor(Math.random() * 9000) + 1000);
+      const candidate = clean.slice(0, 16) + suffix;
+      const result = await tryClaimName(candidate);
+      if (result) return result;
     }
+
+    // Last resort — timestamp suffix, virtually guaranteed unique
+    return clean.slice(0, 12) + Date.now().toString().slice(-6);
   }
 
   async function findUserByUsername(username) {
@@ -996,6 +1000,7 @@ function saveUsername() {
     const input = document.getElementById('username-input');
     const raw = (input.value || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20);
     if (raw.length < 3) { setStatus('Username must be at least 3 characters!'); return; }
+    if (raw.length > 20) { setStatus('Username must be 20 characters or less!'); return; }
 
     const btnSave = document.querySelector('#username-overlay .btn-primary');
     if (btnSave) { btnSave.disabled = true; btnSave.textContent = 'Checking…'; }
