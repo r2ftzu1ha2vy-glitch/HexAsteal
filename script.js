@@ -2989,7 +2989,9 @@ function showBossIntro() {
     // Always try to max out allied hexes adjacent to player first
     const fortifyTransfers = transfers.filter(t => {
       const dst = grid[t.dr][t.dc];
-      return dst.power < MAX_POWER && getNeighbors(t.dr, t.dc).some(([nr, nc]) => grid[nr][nc].owner === PLAYER);
+      return dst.power < MAX_POWER && getNeighbors(t.dr, t.dc).some(([nr, nc]) =>
+        grid[nr][nc].owner === PLAYER && grid[nr][nc].power >= dst.power
+      );
     });
     if (fortifyTransfers.length > 0) {
       fortifyTransfers.sort((a, b) => b.actual - a.actual);
@@ -3141,8 +3143,9 @@ function showBossIntro() {
     // Step 1: Find all enemy hexes adjacent to non-enemy hexes (exposed) and fill them to 9
     const fortifyTransfers = transfers.filter(t => {
       const dst = grid[t.dr][t.dc];
-      const isExposed = getNeighbors(t.dr, t.dc).some(([nr, nc]) => grid[nr][nc].owner !== ENEMY && grid[nr][nc].owner !== BLOCKED);
-      return isExposed && dst.power < MAX_POWER;
+      return getNeighbors(t.dr, t.dc).some(([nr, nc]) =>
+        grid[nr][nc].owner === PLAYER && grid[nr][nc].power >= dst.power
+      );
     });
 
     if (fortifyTransfers.length > 0) {
