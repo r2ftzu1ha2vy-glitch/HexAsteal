@@ -136,7 +136,7 @@ const HexAsteal = (function () {
   'use strict';
 
   // =========== CONSTANTS ===========
-  const COLS = 9, ROWS = 7, HEX_R = 30, MAX_POWER = 9, TOTAL_STAGES = 30;
+  const COLS = 9, ROWS = 7, HEX_R = 30, MAX_POWER = 9, TOTAL_STAGES = 50;
   const HEX_W = Math.sqrt(3) * HEX_R, ROW_H = HEX_R * 1.5;
   const PAD_X = HEX_W / 2 + 14, PAD_Y = HEX_R + 14;
   const PLAYER = 'player', ENEMY = 'enemy', NEUTRAL = 'neutral', BLOCKED = 'blocked';
@@ -253,6 +253,19 @@ const HexAsteal = (function () {
       [400,350,300,250,200].forEach((f,i) =>
         setTimeout(() => this.osc(f, 0.22, 'sawtooth', 0.1), i * 120));
     },
+    mock() {
+      // Descending "wah wah wah" trombone
+      setTimeout(() => this.osc(520, 0.18, 'sawtooth', 0.18, 320), 0);
+      setTimeout(() => this.osc(480, 0.18, 'sawtooth', 0.18, 280), 280);
+      setTimeout(() => this.osc(440, 0.35, 'sawtooth', 0.22, 180), 560);
+      // Little taunting ascending trill after the wah
+      setTimeout(() => this.osc(300, 0.07, 'square', 0.1), 1000);
+      setTimeout(() => this.osc(380, 0.07, 'square', 0.1), 1080);
+      setTimeout(() => this.osc(300, 0.07, 'square', 0.1), 1160);
+      setTimeout(() => this.osc(380, 0.07, 'square', 0.1), 1240);
+      // Final low dismissive thud
+      setTimeout(() => { this.osc(120, 0.4, 'sawtooth', 0.2, 60); this.noise(0.15, 0.12); }, 1400);
+    },
     bossIntro() {
       this.osc(55, 1.5, 'sawtooth', 0.25, 35);
       this.osc(58, 1.5, 'sawtooth', 0.18, 38);
@@ -321,23 +334,61 @@ const HexAsteal = (function () {
   ];
 
   // =========== STAGE CONFIG ===========
+const BOSS_CONFIGS = {
+    10: {
+      name: 'HEXAFORCE', bossType: 'hexaforce',
+      maxTurns: 35, eHexes: 5, ePow: 4, pPow: 4, blocked: 3, pups: 6,
+      bossPow: 7, bossRegen: 2,
+      subtitle: 'Stage 10 — The Iron General',
+      desc: 'A relentless attacker. Fights like a seasoned commander.'
+    },
+    20: {
+      name: 'CHRONOHEX', bossType: 'chronohex',
+      maxTurns: 30, eHexes: 6, ePow: 5, pPow: 4, blocked: 5, pups: 5,
+      bossPow: 8, bossRegen: 3,
+      subtitle: 'Stage 20 — Master of Time',
+      desc: 'Feeds power to its allies and freezes your path forward.'
+    },
+    30: {
+      name: 'HEXANULL', bossType: 'hexanull',
+      maxTurns: 32, eHexes: 7, ePow: 5, pPow: 4, blocked: 4, pups: 5,
+      bossPow: 8, bossRegen: 2,
+      subtitle: 'Stage 30 — The Void Collector',
+      desc: 'Expands its empire quietly — but strike one hex and it retaliates twice.'
+    },
+    40: {
+      name: 'HEXASEIZE', bossType: 'hexaseize',
+      maxTurns: 28, eHexes: 8, ePow: 6, pPow: 4, blocked: 4, pups: 4,
+      bossPow: 9, bossRegen: 2,
+      subtitle: 'Stage 40 — The Conqueror',
+      desc: 'Hunts your hexes relentlessly before claiming the land.'
+    },
+    50: {
+      name: 'HEXARA', bossType: 'hexara',
+      maxTurns: 25, eHexes: 8, ePow: 6, pPow: 4, blocked: 3, pups: 4,
+      bossPow: 9, bossRegen: 3,
+      subtitle: 'Stage 50 — The Eternal Fortress',
+      desc: 'Walls every open hex at full power while hunting yours. The ultimate challenge.'
+    }
+  };
+
   function stageConfig(s) {
     const isBoss = s > 0 && s % 10 === 0;
-    const tier = Math.min(Math.floor((s - 1) / 10), 2);
+    const tier = Math.min(Math.floor((s - 1) / 10), 4);
     const p = ((s - 1) % 10) / 9;
-    if (isBoss) return {
-      maxTurns: [35, 30, 28][tier], eHexes: [5, 7, 9][tier], ePow: [4, 5, 6][tier], pPow: 4,
-      blocked: [3, 4, 4][tier], pups: 6, isBoss: true,
-      bossPow: [7, 8, 9][tier], bossRegen: 2,
-      bossName: ['HEXAFORCE', 'HEXAFORCE II', 'HEXAFORCE SUPREME'][tier], background: 'original'
-    };
+    if (isBoss) {
+      const bc = BOSS_CONFIGS[s] || BOSS_CONFIGS[10];
+      return {
+        ...bc, isBoss: true, background: 'original'
+      };
+    }
     return {
-      maxTurns: Math.round(40 - tier * 4 - p * 3),
-      eHexes: Math.min(Math.round(4 + tier * 1.5 + p * 1.5), 8),
-      ePow: Math.min(Math.round(3 + tier * 0.7 + p * 0.8), 7),
-      pPow: Math.min(3 + Math.floor(tier * 0.5), 5),
-      blocked: Math.min(Math.round(4 + tier + p * 1.5), 8),
-      pups: Math.max(Math.round(8 - tier - p * 1.5), 4),
+      maxTurns: Math.round(40 - tier * 3 - p * 3),
+      eHexes: Math.min(Math.round(4 + tier * 1.2 + p * 1.2), 8),
+      ePow: Math.min(Math.round(3 + tier * 0.6 + p * 0.7), 7),
+      pPow: Math.min(3 + Math.floor(tier * 0.4), 5),
+      blocked: Math.min(Math.round(4 + tier * 0.8 + p * 1), 8),
+      pups: Math.max(Math.round(8 - tier * 0.8 - p * 1), 3),
       isBoss: false, bossPow: 0, bossRegen: 1, bossName: null, background: 'original'
     };
   }
@@ -1486,7 +1537,7 @@ function saveUsername() {
       applyBoardTheme(cfg.background || 'original');
     } else {
       pLabel.textContent = 'YOU';
-      foeLabel.textContent = cfg.isBoss ? (cfg.bossName || 'BOSS') : 'FOE';
+      foeLabel.textContent = cfg.isBoss ? (cfg.name || cfg.bossName || 'BOSS') : 'FOE';
       enemyDot.className = 'color-dot enemy-dot';
       enemyDot.style.background = '';
       enemyDot.style.boxShadow = '';
@@ -1534,9 +1585,11 @@ function saveUsername() {
   function replayTutorial() { SFX.click(); stagesOverlay.classList.add('hidden'); showTutorial(); }
 
   // =========== BOSS INTRO ===========
-  function showBossIntro() {
-    bossNameEl.textContent = cfg.bossName;
-    bossSubEl.textContent = `Stage ${currentStage} — Boss Battle`;
+function showBossIntro() {
+    bossNameEl.textContent = cfg.name || cfg.bossName || 'HEXAFORCE';
+    bossSubEl.textContent = cfg.subtitle || `Stage ${currentStage} — Boss Battle`;
+    const descEl = document.querySelector('.boss-card p');
+    if (descEl) descEl.textContent = cfg.desc || '';
     bossOverlay.classList.remove('hidden');
     BGM.playForStage(true);
     SFX.bossIntro();
@@ -2432,6 +2485,8 @@ function saveUsername() {
   function generateAndPlay() {
     turn = 1; phase = 'select';
     selectedHex = null; validTargets = []; transferTargets = []; animating = false;
+    _hexanullRetaliateCount = 0;
+    _hexanullLastEnemyCount = 0;
     if (gameMode === 'local') localTurn = PLAYER;
     generateMap(); createBoard();
     if (gameMode === 'local') { growPhaseOwner(PLAYER); growPhaseOwner(PLAYER2); }
@@ -2686,7 +2741,8 @@ function saveUsername() {
 
   function growPhase(owner) { growPhaseOwner(owner); }
 
-function beginAITurn() {
+// =========== AI ===========
+  function beginAITurn() {
     phase = 'ai'; setStatus('Enemy is thinking…'); render();
     const thinkTime = { easy: 300, normal: 450, hard: 600, intense: 750, extreme: 900 };
     const d = currentDiff().id;
@@ -2727,9 +2783,7 @@ function beginAITurn() {
       for (const [nr, nc] of getNeighbors(r, c)) {
         if (grid[nr][nc].owner !== ENEMY) continue;
         const src = grid[r][c], dst = grid[nr][nc];
-        const canGive = src.power - 1;
-        const canReceive = MAX_POWER - dst.power;
-        const actual = Math.min(canGive, canReceive);
+        const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
         if (actual <= 0) continue;
         const dstAttackTargets = getAttackTargets(nr, nc);
         const wouldEnableAttack = dstAttackTargets.some(([ar, ac]) => {
@@ -2739,19 +2793,15 @@ function beginAITurn() {
           if (grid[ar][ac].shielded) dp += 3;
           return ap > dp;
         });
-        transfers.push({ sr: r, sc: c, dr: nr, dc: nc, amount: actual, wouldEnableAttack, dstAttacks: dstAttackTargets.length });
+        transfers.push({ sr: r, sc: c, dr: nr, dc: nc, actual, wouldEnableAttack, dstAttacks: dstAttackTargets.length });
       }
     }
     return transfers;
   }
 
-  function aiScoreAttack(a, diff) {
-    let score = 0;
-    if (!a.canWin) {
-      if (a.margin === 0) return -50;
-      return -200;
-    }
-    score = 60 + a.margin * 8;
+  function aiScoreAttack(a) {
+    if (!a.canWin) return a.margin === 0 ? -50 : -200;
+    let score = 60 + a.margin * 8;
     if (a.dOwner === PLAYER) score += 40;
     if (a.dPU) {
       score += 30;
@@ -2763,109 +2813,99 @@ function beginAITurn() {
     }
     if (a.margin === 1) score -= 20;
     const newPow = Math.min(a.sPow - a.dPow, MAX_POWER);
-    const newNeighborAttacks = getNeighbors(a.dr, a.dc).filter(([nr, nc]) =>
-      grid[nr][nc].owner === PLAYER && grid[nr][nc].power < newPow
-    ).length;
-    score += newNeighborAttacks * 15;
+    getNeighbors(a.dr, a.dc).forEach(([nr, nc]) => {
+      if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power < newPow) score += 15;
+    });
     return score;
   }
 
   function aiTakeTurn() {
-    const diff = currentDiff();
-    const id = diff.id;
-
-    if (id === 'easy') { aiEasyTurn(); return; }
-    if (id === 'normal') { aiNormalTurn(); return; }
-    if (id === 'hard') { aiHardTurn(); return; }
+    // Boss stages use their own AI
+    if (cfg.isBoss) {
+      const bt = cfg.bossType || 'hexaforce';
+      if (bt === 'hexaforce') { bossHexaforceTurn(); return; }
+      if (bt === 'chronohex') { bossChronohexTurn(); return; }
+      if (bt === 'hexanull')  { bossHexanullTurn();  return; }
+      if (bt === 'hexaseize') { bossHexaseizeTurn(); return; }
+      if (bt === 'hexara')    { bossHexaraTurn();    return; }
+    }
+    const id = currentDiff().id;
+    if (id === 'easy')    { aiEasyTurn();    return; }
+    if (id === 'normal')  { aiNormalTurn();  return; }
+    if (id === 'hard')    { aiHardTurn();    return; }
     if (id === 'intense') { aiIntenseTurn(); return; }
     if (id === 'extreme') { aiExtremeTurn(); return; }
     aiNormalTurn();
   }
 
-  // EASY: mostly random, often skips, never transfers, sometimes attacks losing hexes
+  function aiFinish() { if (!checkGameOver()) startNewTurn(); }
+
+  // ---- REGULAR DIFFICULTY AI ----
+
   function aiEasyTurn() {
     const attacks = aiGetAllAttacks();
     if (Math.random() < 0.35 || attacks.length === 0) {
-      setStatus('Enemy passed'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+      setStatus('Enemy passed'); setTimeout(aiFinish, 400); return;
     }
-    const shuffled = attacks.sort(() => Math.random() - 0.5);
-    const pick = shuffled[0];
+    attacks.sort(() => Math.random() - 0.5);
+    const pick = attacks[0];
     if (!pick.canWin && Math.random() < 0.6) {
-      setStatus('Enemy fumbled'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+      setStatus('Enemy fumbled'); setTimeout(aiFinish, 400); return;
     }
     flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
-    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+    setTimeout(() => { executeAIAttack(pick); setTimeout(aiFinish, 600); }, 400);
   }
 
-  // NORMAL: picks decent attacks, slight randomness, no transfers
   function aiNormalTurn() {
-    const attacks = aiGetAllAttacks();
-    const winning = attacks.filter(a => a.canWin);
-    if (winning.length === 0) {
-      setStatus('Enemy skipped'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    const attacks = aiGetAllAttacks().filter(a => a.canWin);
+    if (attacks.length === 0) {
+      setStatus('Enemy skipped'); setTimeout(aiFinish, 400); return;
     }
-    const scored = winning.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 20 }));
+    const scored = attacks.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 20 }));
     scored.sort((a, b) => b.score - a.score);
     const pick = scored[0];
     flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
-    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+    setTimeout(() => { executeAIAttack(pick); setTimeout(aiFinish, 600); }, 400);
   }
 
-  // HARD: smarter scoring, occasionally transfers to set up big attacks
   function aiHardTurn() {
-    const attacks = aiGetAllAttacks();
-    const winning = attacks.filter(a => a.canWin);
-
-    // Sometimes transfer to strengthen a hex that can then attack
     if (Math.random() < 0.25) {
       const transfers = aiGetAllTransfers().filter(t => t.wouldEnableAttack);
       if (transfers.length > 0) {
         transfers.sort((a, b) => b.dstAttacks - a.dstAttacks);
-        const t = transfers[0];
-        executeAITransfer(t);
-        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600);
-        return;
+        executeAITransfer(transfers[0]);
+        setTimeout(aiFinish, 600); return;
       }
     }
-
-    if (winning.length === 0) {
-      setStatus('Enemy skipped'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    const attacks = aiGetAllAttacks().filter(a => a.canWin);
+    if (attacks.length === 0) {
+      setStatus('Enemy skipped'); setTimeout(aiFinish, 400); return;
     }
-    const scored = winning.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 10 }));
+    const scored = attacks.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 10 }));
     scored.sort((a, b) => b.score - a.score);
     const pick = scored[0];
     flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
-    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+    setTimeout(() => { executeAIAttack(pick); setTimeout(aiFinish, 600); }, 400);
   }
 
-  // INTENSE: transfers strategically, targets power-ups, prefers high-margin attacks
   function aiIntenseTurn() {
-    const attacks = aiGetAllAttacks();
-    const winning = attacks.filter(a => a.canWin);
+    const attacks = aiGetAllAttacks().filter(a => a.canWin);
     const transfers = aiGetAllTransfers();
-
-    // Prefer transfers that unlock powerful attacks or power-ups
     const goodTransfers = transfers.filter(t => t.wouldEnableAttack || t.dstAttacks >= 2);
     if (goodTransfers.length > 0 && Math.random() < 0.45) {
       goodTransfers.sort((a, b) => b.dstAttacks - a.dstAttacks);
-      const t = goodTransfers[0];
-      executeAITransfer(t);
-      setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600);
-      return;
+      executeAITransfer(goodTransfers[0]);
+      setTimeout(aiFinish, 600); return;
     }
-
-    if (winning.length === 0) {
-      // Try any transfer to improve position
+    if (attacks.length === 0) {
       if (transfers.length > 0) {
         transfers.sort((a, b) => b.actual - a.actual);
         executeAITransfer(transfers[0]);
-        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600);
-        return;
+        setTimeout(aiFinish, 600); return;
       }
-      setStatus('Enemy repositioned'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+      setStatus('Enemy repositioned'); setTimeout(aiFinish, 400); return;
     }
-
-    const scored = winning.map(a => {
+    const scored = attacks.map(a => {
       let s = aiScoreAttack(a);
       if (a.dPU === 'freeze' || a.dPU === 'drain') s += 40;
       if (a.margin >= 3) s += 20;
@@ -2874,16 +2914,12 @@ function beginAITurn() {
     scored.sort((a, b) => b.score - a.score);
     const pick = scored[0];
     flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
-    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+    setTimeout(() => { executeAIAttack(pick); setTimeout(aiFinish, 600); }, 400);
   }
 
-  // EXTREME: full minimax-style evaluation, always transfers optimally, plans 2 moves ahead
   function aiExtremeTurn() {
-    const attacks = aiGetAllAttacks();
-    const winning = attacks.filter(a => a.canWin);
+    const attacks = aiGetAllAttacks().filter(a => a.canWin);
     const transfers = aiGetAllTransfers();
-
-    // Score every transfer by what attacks it would open up
     const scoredTransfers = transfers.map(t => {
       let s = 0;
       const dst = grid[t.dr][t.dc];
@@ -2899,49 +2935,261 @@ function beginAITurn() {
           if (grid[nr][nc].owner === PLAYER) s += 30;
         }
       });
-      // Penalise weakening the source if it becomes attackable
-      const srcPow = grid[t.sr][t.sc].power - t.amount;
+      const srcLeftover = grid[t.sr][t.sc].power - t.actual;
       getNeighbors(t.sr, t.sc).forEach(([nr, nc]) => {
-        if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power > srcPow) s -= 35;
+        if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power > srcLeftover) s -= 35;
       });
       return { ...t, score: s };
     });
-
-    const scoredAttacks = winning.map(a => {
+    const scoredAttacks = attacks.map(a => {
       let s = aiScoreAttack(a);
       if (a.dPU) s += 45;
       if (a.margin >= 4) s += 30;
       if (a.margin === 1) s -= 30;
-      // Penalise leaving source exposed
-      const leftoverPow = 1;
       getNeighbors(a.sr, a.sc).forEach(([nr, nc]) => {
-        if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power > leftoverPow) s -= 20;
+        if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power > 1) s -= 20;
       });
       return { ...a, score: s };
     });
+    const bestT = scoredTransfers.length > 0 ? scoredTransfers.sort((a, b) => b.score - a.score)[0] : null;
+    const bestA = scoredAttacks.length > 0 ? scoredAttacks.sort((a, b) => b.score - a.score)[0] : null;
+    if (bestT && bestA && bestT.score > bestA.score + 20) {
+      executeAITransfer(bestT); setTimeout(aiFinish, 600); return;
+    }
+    if (bestT && !bestA && bestT.score > 0) {
+      executeAITransfer(bestT); setTimeout(aiFinish, 600); return;
+    }
+    if (bestA) {
+      flashHex(bestA.sr, bestA.sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(bestA); setTimeout(aiFinish, 600); }, 400); return;
+    }
+    setStatus('Enemy calculating…'); setTimeout(aiFinish, 400);
+  }
 
-    const bestTransfer = scoredTransfers.length > 0 ? scoredTransfers.sort((a, b) => b.score - a.score)[0] : null;
-    const bestAttack = scoredAttacks.length > 0 ? scoredAttacks.sort((a, b) => b.score - a.score)[0] : null;
+  // ---- BOSS AI ----
 
-    // Pick whichever is higher value
-    if (bestTransfer && bestAttack) {
-      if (bestTransfer.score > bestAttack.score + 20) {
-        executeAITransfer(bestTransfer);
-        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); return;
+  // HEXAFORCE (Stage 10): Hard-mode attacker, picks highest-margin winning attacks
+  function bossHexaforceTurn() {
+    const attacks = aiGetAllAttacks().filter(a => a.canWin);
+    if (attacks.length === 0) {
+      setStatus('HexaForce holds the line…'); setTimeout(aiFinish, 400); return;
+    }
+    const scored = attacks.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 8 }));
+    scored.sort((a, b) => b.score - a.score);
+    const pick = scored[0];
+    flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
+    setTimeout(() => { executeAIAttack(pick); setTimeout(aiFinish, 600); }, 400);
+  }
+
+  // CHRONOHEX (Stage 20): Feeds allies to max, uses freeze power-ups aggressively, tries to block player paths
+  function bossChronohexTurn() {
+    const transfers = aiGetAllTransfers();
+    const attacks = aiGetAllAttacks().filter(a => a.canWin);
+
+    // Always try to max out allied hexes adjacent to player first
+    const fortifyTransfers = transfers.filter(t => {
+      const dst = grid[t.dr][t.dc];
+      return dst.power < MAX_POWER && getNeighbors(t.dr, t.dc).some(([nr, nc]) => grid[nr][nc].owner === PLAYER);
+    });
+    if (fortifyTransfers.length > 0) {
+      fortifyTransfers.sort((a, b) => b.actual - a.actual);
+      executeAITransfer(fortifyTransfers[0]);
+      // After fortifying, also try to attack with freeze priority
+      setTimeout(() => {
+        const freezeAtks = aiGetAllAttacks().filter(a => a.canWin && a.dPU === 'freeze');
+        if (freezeAtks.length > 0) {
+          flashHex(freezeAtks[0].sr, freezeAtks[0].sc, 'flash-ai-source', 300); SFX.aiMove();
+          setTimeout(() => { executeAIAttack(freezeAtks[0]); setTimeout(aiFinish, 500); }, 300);
+        } else { setTimeout(aiFinish, 200); }
+      }, 500);
+      return;
+    }
+
+    // Prioritise freeze power-up captures to slow player
+    const freezeAtks = attacks.filter(a => a.dPU === 'freeze');
+    if (freezeAtks.length > 0) {
+      flashHex(freezeAtks[0].sr, freezeAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(freezeAtks[0]); setTimeout(aiFinish, 600); }, 400); return;
+    }
+
+    // Transfer to any ally that can then attack player
+    const unlockTransfers = transfers.filter(t => t.wouldEnableAttack);
+    if (unlockTransfers.length > 0) {
+      unlockTransfers.sort((a, b) => b.dstAttacks - a.dstAttacks);
+      executeAITransfer(unlockTransfers[0]);
+      setTimeout(aiFinish, 600); return;
+    }
+
+    if (attacks.length === 0) {
+      // Bulk transfer to strengthen positions
+      if (transfers.length > 0) {
+        transfers.sort((a, b) => b.actual - a.actual);
+        executeAITransfer(transfers[0]);
       }
-    } else if (bestTransfer && !bestAttack) {
-      if (bestTransfer.score > 0) {
-        executeAITransfer(bestTransfer);
-        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); return;
+      setStatus('ChronoHex restructures…'); setTimeout(aiFinish, 500); return;
+    }
+
+    const scored = attacks.map(a => {
+      let s = aiScoreAttack(a);
+      if (a.dPU === 'freeze') s += 60;
+      if (a.dPU === 'drain')  s += 30;
+      if (a.dOwner === PLAYER) s += 50;
+      return { ...a, score: s };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    flashHex(scored[0].sr, scored[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+    setTimeout(() => { executeAIAttack(scored[0]); setTimeout(aiFinish, 600); }, 400);
+  }
+
+  // HEXANULL (Stage 30): Expands into neutral hexes first; if player took one of its hexes, retaliates on 2
+  let _hexanullRetaliateCount = 0;
+  let _hexanullLastEnemyCount = 0;
+
+  function bossHexanullTurn() {
+    // Count current enemy hexes
+    let currentEnemyCount = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (grid[r][c].owner === ENEMY) currentEnemyCount++;
+
+    // If player captured an enemy hex since last turn, retaliate x2
+    if (_hexanullLastEnemyCount > 0 && currentEnemyCount < _hexanullLastEnemyCount) {
+      _hexanullRetaliateCount = 2;
+    }
+    _hexanullLastEnemyCount = currentEnemyCount;
+
+    if (_hexanullRetaliateCount > 0) {
+      _hexanullRetaliateCount--;
+      // Attack player hexes with best scoring
+      const playerAtks = aiGetAllAttacks().filter(a => a.canWin && a.dOwner === PLAYER);
+      if (playerAtks.length > 0) {
+        playerAtks.sort((a, b) => b.margin - a.margin);
+        flashHex(playerAtks[0].sr, playerAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+        setTimeout(() => {
+          executeAIAttack(playerAtks[0]);
+          setStatus('HexaNull retaliates!');
+          setTimeout(aiFinish, 600);
+        }, 400); return;
       }
     }
 
-    if (bestAttack) {
-      flashHex(bestAttack.sr, bestAttack.sc, 'flash-ai-source', 400); SFX.aiMove();
-      setTimeout(() => { executeAIAttack(bestAttack); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
-    } else {
-      setStatus('Enemy calculating…'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400);
+    // Default: expand into neutral hexes first
+    const neutralAtks = aiGetAllAttacks().filter(a => a.canWin && a.dOwner === NEUTRAL);
+    if (neutralAtks.length > 0) {
+      neutralAtks.sort((a, b) => b.margin - a.margin);
+      flashHex(neutralAtks[0].sr, neutralAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(neutralAtks[0]); setTimeout(aiFinish, 600); }, 400); return;
     }
+
+    // No neutrals — attack player
+    const playerAtks = aiGetAllAttacks().filter(a => a.canWin && a.dOwner === PLAYER);
+    if (playerAtks.length > 0) {
+      playerAtks.sort((a, b) => b.margin - a.margin);
+      flashHex(playerAtks[0].sr, playerAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(playerAtks[0]); setTimeout(aiFinish, 600); }, 400); return;
+    }
+
+    // Transfers to consolidate
+    const transfers = aiGetAllTransfers().filter(t => t.wouldEnableAttack);
+    if (transfers.length > 0) {
+      executeAITransfer(transfers[0]);
+      setTimeout(aiFinish, 600); return;
+    }
+    setStatus('HexaNull expands silently…'); setTimeout(aiFinish, 400);
+  }
+
+  // HEXASEIZE (Stage 40): Hunts player hexes first aggressively, then grabs land
+  function bossHexaseizeTurn() {
+    const allAtks = aiGetAllAttacks().filter(a => a.canWin);
+    const transfers = aiGetAllTransfers();
+
+    // Always go for player hexes first
+    const playerAtks = allAtks.filter(a => a.dOwner === PLAYER);
+    if (playerAtks.length > 0) {
+      const scored = playerAtks.map(a => {
+        let s = aiScoreAttack(a);
+        s += a.dPow * 5;
+        if (a.dPU) s += 40;
+        return { ...a, score: s };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      flashHex(scored[0].sr, scored[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(scored[0]); setTimeout(aiFinish, 600); }, 400); return;
+    }
+
+    // Transfer to reach player hexes
+    const reachTransfers = transfers.filter(t => {
+      const newPow = Math.min(grid[t.dr][t.dc].power + t.actual, MAX_POWER);
+      return getAttackTargets(t.dr, t.dc).some(([nr, nc]) =>
+        grid[nr][nc].owner === PLAYER && newPow > grid[nr][nc].power
+      );
+    });
+    if (reachTransfers.length > 0) {
+      reachTransfers.sort((a, b) => b.actual - a.actual);
+      executeAITransfer(reachTransfers[0]);
+      setTimeout(aiFinish, 600); return;
+    }
+
+    // Fall back to grabbing neutral hexes
+    const neutralAtks = allAtks.filter(a => a.dOwner === NEUTRAL);
+    if (neutralAtks.length > 0) {
+      neutralAtks.sort((a, b) => b.margin - a.margin);
+      flashHex(neutralAtks[0].sr, neutralAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(neutralAtks[0]); setTimeout(aiFinish, 600); }, 400); return;
+    }
+
+    setStatus('HexaSeize advances…'); setTimeout(aiFinish, 400);
+  }
+
+  // HEXARA (Stage 50): Fortifies all exposed hexes to MAX first, then hunts player while expanding
+  function bossHexaraTurn() {
+    const transfers = aiGetAllTransfers();
+    const allAtks = aiGetAllAttacks().filter(a => a.canWin);
+
+    // Step 1: Find all enemy hexes adjacent to non-enemy hexes (exposed) and fill them to 9
+    const fortifyTransfers = transfers.filter(t => {
+      const dst = grid[t.dr][t.dc];
+      const isExposed = getNeighbors(t.dr, t.dc).some(([nr, nc]) => grid[nr][nc].owner !== ENEMY && grid[nr][nc].owner !== BLOCKED);
+      return isExposed && dst.power < MAX_POWER;
+    });
+
+    if (fortifyTransfers.length > 0) {
+      fortifyTransfers.sort((a, b) => {
+        const aPri = getNeighbors(a.dr, a.dc).some(([nr, nc]) => grid[nr][nc].owner === PLAYER) ? 1 : 0;
+        const bPri = getNeighbors(b.dr, b.dc).some(([nr, nc]) => grid[nr][nc].owner === PLAYER) ? 1 : 0;
+        if (bPri !== aPri) return bPri - aPri;
+        return b.actual - a.actual;
+      });
+      executeAITransfer(fortifyTransfers[0]);
+
+      // After fortifying, also attack if a player hex is reachable
+      setTimeout(() => {
+        const playerAtks = aiGetAllAttacks().filter(a => a.canWin && a.dOwner === PLAYER);
+        if (playerAtks.length > 0) {
+          playerAtks.sort((a, b) => b.margin - a.margin);
+          flashHex(playerAtks[0].sr, playerAtks[0].sc, 'flash-ai-source', 300); SFX.aiMove();
+          setTimeout(() => { executeAIAttack(playerAtks[0]); setTimeout(aiFinish, 500); }, 300);
+        } else { setTimeout(aiFinish, 200); }
+      }, 500);
+      return;
+    }
+
+    // Step 2: Attack player hexes
+    const playerAtks = allAtks.filter(a => a.dOwner === PLAYER);
+    if (playerAtks.length > 0) {
+      playerAtks.sort((a, b) => b.margin - a.margin);
+      flashHex(playerAtks[0].sr, playerAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(playerAtks[0]); setTimeout(aiFinish, 600); }, 400); return;
+    }
+
+    // Step 3: Expand into neutrals
+    const neutralAtks = allAtks.filter(a => a.dOwner === NEUTRAL);
+    if (neutralAtks.length > 0) {
+      neutralAtks.sort((a, b) => b.margin - a.margin);
+      flashHex(neutralAtks[0].sr, neutralAtks[0].sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(neutralAtks[0]); setTimeout(aiFinish, 600); }, 400); return;
+    }
+
+    setStatus('Hexara holds the fortress…'); setTimeout(aiFinish, 400);
   }
 
   function executeAIAttack(a) {
@@ -2969,7 +3217,7 @@ function beginAITurn() {
     render();
   }
 
-function executeAITransfer(t) {
+  function executeAITransfer(t) {
     const src = grid[t.sr][t.sc], dst = grid[t.dr][t.dc];
     const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
     if (actual <= 0) return;
@@ -3017,7 +3265,7 @@ function executeAITransfer(t) {
 
     if (cfg.isBoss && !hasBoss && hasP) {
       awardHexoneX(pH, 0, true);
-      setTimeout(() => showEnd('Boss Defeated!', `${cfg.bossName} destroyed on stage ${currentStage}!`, 'win'), 800);
+      setTimeout(() => showEnd('Boss Defeated!', `${cfg.name || cfg.bossName} destroyed on stage ${currentStage}!`, 'win'), 800);
       return true;
     }
     if (!hasE) {
@@ -3098,6 +3346,7 @@ function executeAITransfer(t) {
       SFX.defeat(); btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
     } else {
       SFX.defeat();
+      setTimeout(() => SFX.mock(), 900);
       if (gameMode !== 'ai') { btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden'); }
       else { btnNext.classList.add('hidden'); }
     }
