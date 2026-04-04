@@ -2975,6 +2975,7 @@ const HexAsteal = (function () {
     updateUsernameDisplay();
     updateDiffButton();
     checkRejoinOnLoad();
+    startOwnerGiftListener();
 
     if (!progress.tutDone) showTutorial();
     else startStage(progress.stage);
@@ -2998,21 +2999,37 @@ const HexAsteal = (function () {
     setStatus(`[ADMIN] +${amt} HexoneX given!`);
   }
 
-  function adminGiveOppHexoneX(targetUsername) {
-    const amt = parseInt(prompt(`How much HexoneX to give ${targetUsername || 'opponent'}?`, '1000'), 10);
-    if (isNaN(amt) || amt <= 0) return;
+async function adminGiveOppHexoneX(targetUsername) {
+  const amt = parseInt(prompt(`How much HexoneX to give ${targetUsername || 'opponent'}?`, '1000'), 10);
+  if (isNaN(amt) || amt <= 0) return;
 
-    if (targetUsername) {
-      findUserByUsername(targetUsername).then(userInfo => {
-        if (!userInfo || !userInfo.roomCode) { setStatus(`[ADMIN] ${targetUsername} not online!`); return; }
-        const theirKey = `admin_opp_hexonex_${userInfo.side}`;
-        update(ref(database, `rooms/${userInfo.roomCode}`), {
-          [theirKey]: { amount: amt, ts: Date.now() }
-        }).catch(console.error);
-        setStatus(`[ADMIN] Sent ${amt} HexoneX to ${targetUsername}`);
-      });
-      return;
-    }
+  // Gift to yourself
+  if (!targetUsername) {
+    if (gameMode !== 'online' || !roomCode) { setStatus('[ADMIN] Provide a username or be in an online game!'); return; }
+    const oppSide = onlineSide === 'player' ? 'player2' : 'player';
+    update(ref(database, `rooms/${roomCode}`), {
+      [`admin_opp_hexonex_${oppSide}`]: { amount: amt, ts: Date.now() }
+    }).catch(console.error);
+    setStatus(`[ADMIN] Sent ${amt} HexoneX to opponent`);
+    return;
+  }
+
+  // Try live room lookup first
+  const userInfo = await findUserByUsername(targetUsername);
+  if (userInfo && userInfo.roomCode) {
+    update(ref(database, `rooms/${userInfo.roomCode}`), {
+      [`admin_opp_hexonex_${userInfo.side}`]: { amount: amt, ts: Date.now() }
+    }).catch(console.error);
+    setStatus(`[ADMIN] Sent ${amt} HexoneX to ${targetUsername} (in room)`);
+    return;
+  }
+
+  // Fallback: write to a persistent inbox the player reads on next login/game start
+  update(ref(database, `user_inbox/${targetUsername}`), {
+    hexonex: { amount: amt, ts: Date.now(), from: progress.username || 'admin' }
+  }).catch(console.error);
+  setStatus(`[ADMIN] ${targetUsername} not in a room — HexoneX queued in their inbox`);
+}
 
     if (gameMode !== 'online' || !roomCode) { setStatus('[ADMIN] Online only (or provide a username)!'); return; }
     const oppSide = onlineSide === 'player' ? 'player2' : 'player';
