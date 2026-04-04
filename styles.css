@@ -306,9 +306,9 @@ body {
 #btn-mode { border-color: rgba(56,189,248,0.4) !important; color: #38bdf8 !important; }
 #btn-mode:hover { background: rgba(56,189,248,0.1) !important; }
 
-#btn-username { border-color: rgba(163,230,53,0.4) !important; color: #a3e635 !important; max-width: 110px; }
+#btn-username { border-color: rgba(163,230,53,0.4) !important; color: #a3e635 !important; max-width: 180px; }
 #btn-username:hover { background: rgba(163,230,53,0.1) !important; }
-#btn-username #my-username-display { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70px; }
+#btn-username #my-username-display { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
 
 #rules-hint { font-size: 10px; color: #4b5563; line-height: 1.3; }
 #rules-hint strong { color: #6b7280; }
