@@ -2686,14 +2686,17 @@ function saveUsername() {
 
   function growPhase(owner) { growPhaseOwner(owner); }
 
-  // =========== AI ===========
-  function beginAITurn() {
+function beginAITurn() {
     phase = 'ai'; setStatus('Enemy is thinking…'); render();
-    setTimeout(() => { growPhase(ENEMY); render(); setTimeout(aiAttack, 400); }, 450);
+    const thinkTime = { easy: 300, normal: 450, hard: 600, intense: 750, extreme: 900 };
+    const d = currentDiff().id;
+    setTimeout(() => {
+      growPhase(ENEMY); render();
+      setTimeout(aiTakeTurn, thinkTime[d] || 450);
+    }, 450);
   }
 
-  function aiAttack() {
-    const diff = currentDiff();
+  function aiGetAllAttacks() {
     const attacks = [];
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (grid[r][c].owner !== ENEMY || grid[r][c].frozen) continue;
@@ -2703,64 +2706,278 @@ function saveUsername() {
         if (src.blazeBuffed) aPow = Math.min(aPow * 2, 18);
         let dPow = grid[nr][nc].power;
         if (grid[nr][nc].shielded) dPow += 3;
-        attacks.push({ sr:r, sc:c, dr:nr, dc:nc, sPow:aPow, dPow, dOwner:grid[nr][nc].owner, dPU:grid[nr][nc].powerup });
+        attacks.push({
+          sr: r, sc: c, dr: nr, dc: nc,
+          sPow: aPow, dPow,
+          canWin: aPow > dPow,
+          margin: aPow - dPow,
+          dOwner: grid[nr][nc].owner,
+          dPU: grid[nr][nc].powerup,
+          isBoss: grid[r][c].boss
+        });
+      }
+    }
+    return attacks;
+  }
+
+  function aiGetAllTransfers() {
+    const transfers = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (grid[r][c].owner !== ENEMY || grid[r][c].frozen || grid[r][c].power <= 1) continue;
+      for (const [nr, nc] of getNeighbors(r, c)) {
+        if (grid[nr][nc].owner !== ENEMY) continue;
+        const src = grid[r][c], dst = grid[nr][nc];
+        const canGive = src.power - 1;
+        const canReceive = MAX_POWER - dst.power;
+        const actual = Math.min(canGive, canReceive);
+        if (actual <= 0) continue;
+        const dstAttackTargets = getAttackTargets(nr, nc);
+        const wouldEnableAttack = dstAttackTargets.some(([ar, ac]) => {
+          let ap = dst.power + actual;
+          if (dst.blazeBuffed) ap = Math.min(ap * 2, 18);
+          let dp = grid[ar][ac].power;
+          if (grid[ar][ac].shielded) dp += 3;
+          return ap > dp;
+        });
+        transfers.push({ sr: r, sc: c, dr: nr, dc: nc, amount: actual, wouldEnableAttack, dstAttacks: dstAttackTargets.length });
+      }
+    }
+    return transfers;
+  }
+
+  function aiScoreAttack(a, diff) {
+    let score = 0;
+    if (!a.canWin) {
+      if (a.margin === 0) return -50;
+      return -200;
+    }
+    score = 60 + a.margin * 8;
+    if (a.dOwner === PLAYER) score += 40;
+    if (a.dPU) {
+      score += 30;
+      if (a.dPU === 'surge')  score += 25;
+      if (a.dPU === 'drain')  score += 20;
+      if (a.dPU === 'freeze') score += 35;
+      if (a.dPU === 'blaze')  score += 15;
+      if (a.dPU === 'spread') score += 10;
+    }
+    if (a.margin === 1) score -= 20;
+    const newPow = Math.min(a.sPow - a.dPow, MAX_POWER);
+    const newNeighborAttacks = getNeighbors(a.dr, a.dc).filter(([nr, nc]) =>
+      grid[nr][nc].owner === PLAYER && grid[nr][nc].power < newPow
+    ).length;
+    score += newNeighborAttacks * 15;
+    return score;
+  }
+
+  function aiTakeTurn() {
+    const diff = currentDiff();
+    const id = diff.id;
+
+    if (id === 'easy') { aiEasyTurn(); return; }
+    if (id === 'normal') { aiNormalTurn(); return; }
+    if (id === 'hard') { aiHardTurn(); return; }
+    if (id === 'intense') { aiIntenseTurn(); return; }
+    if (id === 'extreme') { aiExtremeTurn(); return; }
+    aiNormalTurn();
+  }
+
+  // EASY: mostly random, often skips, never transfers, sometimes attacks losing hexes
+  function aiEasyTurn() {
+    const attacks = aiGetAllAttacks();
+    if (Math.random() < 0.35 || attacks.length === 0) {
+      setStatus('Enemy passed'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    }
+    const shuffled = attacks.sort(() => Math.random() - 0.5);
+    const pick = shuffled[0];
+    if (!pick.canWin && Math.random() < 0.6) {
+      setStatus('Enemy fumbled'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    }
+    flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
+    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+  }
+
+  // NORMAL: picks decent attacks, slight randomness, no transfers
+  function aiNormalTurn() {
+    const attacks = aiGetAllAttacks();
+    const winning = attacks.filter(a => a.canWin);
+    if (winning.length === 0) {
+      setStatus('Enemy skipped'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    }
+    const scored = winning.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 20 }));
+    scored.sort((a, b) => b.score - a.score);
+    const pick = scored[0];
+    flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
+    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+  }
+
+  // HARD: smarter scoring, occasionally transfers to set up big attacks
+  function aiHardTurn() {
+    const attacks = aiGetAllAttacks();
+    const winning = attacks.filter(a => a.canWin);
+
+    // Sometimes transfer to strengthen a hex that can then attack
+    if (Math.random() < 0.25) {
+      const transfers = aiGetAllTransfers().filter(t => t.wouldEnableAttack);
+      if (transfers.length > 0) {
+        transfers.sort((a, b) => b.dstAttacks - a.dstAttacks);
+        const t = transfers[0];
+        executeAITransfer(t);
+        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600);
+        return;
       }
     }
 
-    let best = null, bestScore = -Infinity;
-    const diffAggression = { normal: 0, hard: 20, intense: 45, extreme: 80, easy: -20 };
-    const aggression = Math.min(currentStage * 2, 40) + (diffAggression[diff.id] || 0);
-    for (const a of attacks) {
-      let score = 0;
-      const diff2 = a.sPow - a.dPow;
-      if (diff2 > 0) {
-        score = 100 + diff2 * 10;
-        if (a.dOwner === PLAYER) score += 50 + aggression;
-        score += a.dPow * 3;
-        if (a.dPU) {
-          score += 35;
-          if (a.dPU === 'freeze') score += 25;
-          if (a.dPU === 'drain') score += 20;
-          if (a.dPU === 'blaze') score += 15;
-        }
-      } else if (diff2 === 0) score = -30;
-      else score = -100;
-      score += Math.random() * diff.randomFactor;
-      if (score > bestScore) { bestScore = score; best = a; }
+    if (winning.length === 0) {
+      setStatus('Enemy skipped'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    }
+    const scored = winning.map(a => ({ ...a, score: aiScoreAttack(a) + Math.random() * 10 }));
+    scored.sort((a, b) => b.score - a.score);
+    const pick = scored[0];
+    flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
+    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+  }
+
+  // INTENSE: transfers strategically, targets power-ups, prefers high-margin attacks
+  function aiIntenseTurn() {
+    const attacks = aiGetAllAttacks();
+    const winning = attacks.filter(a => a.canWin);
+    const transfers = aiGetAllTransfers();
+
+    // Prefer transfers that unlock powerful attacks or power-ups
+    const goodTransfers = transfers.filter(t => t.wouldEnableAttack || t.dstAttacks >= 2);
+    if (goodTransfers.length > 0 && Math.random() < 0.45) {
+      goodTransfers.sort((a, b) => b.dstAttacks - a.dstAttacks);
+      const t = goodTransfers[0];
+      executeAITransfer(t);
+      setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600);
+      return;
     }
 
-    if (best && bestScore > diff.scoreThresh) {
-      flashHex(best.sr, best.sc, 'flash-ai-source', 400); SFX.aiMove();
-      setTimeout(() => {
-        const src = grid[best.sr][best.sc], dst = grid[best.dr][best.dc];
-        let aPow = src.power;
-        const wasBlazed = src.blazeBuffed;
-        if (wasBlazed) { aPow = Math.min(aPow*2,18); src.blazeBuffed = false; }
-        let dPow = dst.power;
-        const wasShielded = dst.shielded;
-        if (wasShielded) dPow += 3;
-        const capPU = dst.powerup;
+    if (winning.length === 0) {
+      // Try any transfer to improve position
+      if (transfers.length > 0) {
+        transfers.sort((a, b) => b.actual - a.actual);
+        executeAITransfer(transfers[0]);
+        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600);
+        return;
+      }
+      setStatus('Enemy repositioned'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400); return;
+    }
 
-        if (aPow > dPow) {
-          dst.owner = ENEMY; dst.power = Math.min(aPow-dPow, MAX_POWER);
-          src.power = 1; dst.powerup = null; dst.shielded = false;
-          dst.blazeBuffed = false; dst.frozen = false;
-          flashHex(best.dr, best.dc, 'flash-ai-capture', 500); SFX.attack();
-          let msg = `Enemy captured! (${wasBlazed ? aPow+' 2x' : aPow} vs ${wasShielded ? dPow+' shield' : dPow})`;
-          if (capPU) msg += ' · ' + applyPowerup(capPU, best.dr, best.dc, ENEMY);
-          setStatus(msg);
-        } else if (aPow === dPow) {
-          src.power = Math.max(1, src.power-1); setStatus('Enemy tied!');
-        } else {
-          src.power = 1; if (dst.power>1) dst.power-=1; setStatus('Enemy failed!');
+    const scored = winning.map(a => {
+      let s = aiScoreAttack(a);
+      if (a.dPU === 'freeze' || a.dPU === 'drain') s += 40;
+      if (a.margin >= 3) s += 20;
+      return { ...a, score: s + Math.random() * 5 };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const pick = scored[0];
+    flashHex(pick.sr, pick.sc, 'flash-ai-source', 400); SFX.aiMove();
+    setTimeout(() => { executeAIAttack(pick); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
+  }
+
+  // EXTREME: full minimax-style evaluation, always transfers optimally, plans 2 moves ahead
+  function aiExtremeTurn() {
+    const attacks = aiGetAllAttacks();
+    const winning = attacks.filter(a => a.canWin);
+    const transfers = aiGetAllTransfers();
+
+    // Score every transfer by what attacks it would open up
+    const scoredTransfers = transfers.map(t => {
+      let s = 0;
+      const dst = grid[t.dr][t.dc];
+      const newPow = Math.min(dst.power + t.actual, MAX_POWER);
+      getAttackTargets(t.dr, t.dc).forEach(([nr, nc]) => {
+        let ap = newPow;
+        if (dst.blazeBuffed) ap = Math.min(ap * 2, 18);
+        let dp = grid[nr][nc].power;
+        if (grid[nr][nc].shielded) dp += 3;
+        if (ap > dp) {
+          s += 80 + (ap - dp) * 10;
+          if (grid[nr][nc].powerup) s += 50;
+          if (grid[nr][nc].owner === PLAYER) s += 30;
         }
-        render();
-        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 550);
-      }, 400);
+      });
+      // Penalise weakening the source if it becomes attackable
+      const srcPow = grid[t.sr][t.sc].power - t.amount;
+      getNeighbors(t.sr, t.sc).forEach(([nr, nc]) => {
+        if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power > srcPow) s -= 35;
+      });
+      return { ...t, score: s };
+    });
+
+    const scoredAttacks = winning.map(a => {
+      let s = aiScoreAttack(a);
+      if (a.dPU) s += 45;
+      if (a.margin >= 4) s += 30;
+      if (a.margin === 1) s -= 30;
+      // Penalise leaving source exposed
+      const leftoverPow = 1;
+      getNeighbors(a.sr, a.sc).forEach(([nr, nc]) => {
+        if (grid[nr][nc].owner === PLAYER && grid[nr][nc].power > leftoverPow) s -= 20;
+      });
+      return { ...a, score: s };
+    });
+
+    const bestTransfer = scoredTransfers.length > 0 ? scoredTransfers.sort((a, b) => b.score - a.score)[0] : null;
+    const bestAttack = scoredAttacks.length > 0 ? scoredAttacks.sort((a, b) => b.score - a.score)[0] : null;
+
+    // Pick whichever is higher value
+    if (bestTransfer && bestAttack) {
+      if (bestTransfer.score > bestAttack.score + 20) {
+        executeAITransfer(bestTransfer);
+        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); return;
+      }
+    } else if (bestTransfer && !bestAttack) {
+      if (bestTransfer.score > 0) {
+        executeAITransfer(bestTransfer);
+        setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); return;
+      }
+    }
+
+    if (bestAttack) {
+      flashHex(bestAttack.sr, bestAttack.sc, 'flash-ai-source', 400); SFX.aiMove();
+      setTimeout(() => { executeAIAttack(bestAttack); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 600); }, 400);
     } else {
-      setStatus('Enemy skipped');
-      setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 350);
+      setStatus('Enemy calculating…'); setTimeout(() => { if (!checkGameOver()) startNewTurn(); }, 400);
     }
+  }
+
+  function executeAIAttack(a) {
+    const src = grid[a.sr][a.sc], dst = grid[a.dr][a.dc];
+    let aPow = src.power;
+    const wasBlazed = src.blazeBuffed;
+    if (wasBlazed) { aPow = Math.min(aPow * 2, 18); src.blazeBuffed = false; }
+    let dPow = dst.power;
+    const wasShielded = dst.shielded;
+    if (wasShielded) dPow += 3;
+    const capPU = dst.powerup;
+    if (aPow > dPow) {
+      dst.owner = ENEMY; dst.power = Math.min(aPow - dPow, MAX_POWER);
+      src.power = 1; dst.powerup = null; dst.shielded = false;
+      dst.blazeBuffed = false; dst.frozen = false; dst.boss = false;
+      flashHex(a.dr, a.dc, 'flash-ai-capture', 500); SFX.attack();
+      let msg = `Enemy captured! (${wasBlazed ? aPow + ' 2x' : aPow} vs ${wasShielded ? dPow + ' shield' : dPow})`;
+      if (capPU) msg += ' · ' + applyPowerup(capPU, a.dr, a.dc, ENEMY);
+      setStatus(msg);
+    } else if (aPow === dPow) {
+      src.power = Math.max(1, src.power - 1); setStatus('Enemy tied!');
+    } else {
+      src.power = 1; if (dst.power > 1) dst.power -= 1; setStatus('Enemy failed!');
+    }
+    render();
+  }
+
+function executeAITransfer(t) {
+    const src = grid[t.sr][t.sc], dst = grid[t.dr][t.dc];
+    const actual = Math.min(src.power - 1, MAX_POWER - dst.power);
+    if (actual <= 0) return;
+    src.power -= actual; dst.power += actual;
+    flashHex(t.sr, t.sc, 'flash-transfer-out', 400);
+    flashHex(t.dr, t.dc, 'flash-transfer-in', 400);
+    setStatus(`Enemy transferred ${actual} power`);
+    render();
   }
 
   // =========== TURN MANAGEMENT ===========
