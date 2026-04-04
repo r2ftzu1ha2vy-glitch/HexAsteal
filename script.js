@@ -2994,14 +2994,7 @@ function showBossIntro() {
     if (fortifyTransfers.length > 0) {
       fortifyTransfers.sort((a, b) => b.actual - a.actual);
       executeAITransfer(fortifyTransfers[0]);
-      // After fortifying, also try to attack with freeze priority
-      setTimeout(() => {
-        const freezeAtks = aiGetAllAttacks().filter(a => a.canWin && a.dPU === 'freeze');
-        if (freezeAtks.length > 0) {
-          flashHex(freezeAtks[0].sr, freezeAtks[0].sc, 'flash-ai-source', 300); SFX.aiMove();
-          setTimeout(() => { executeAIAttack(freezeAtks[0]); setTimeout(aiFinish, 500); }, 300);
-        } else { setTimeout(aiFinish, 200); }
-      }, 500);
+      setTimeout(aiFinish, 600);
       return;
     }
 
@@ -3160,16 +3153,7 @@ function showBossIntro() {
         return b.actual - a.actual;
       });
       executeAITransfer(fortifyTransfers[0]);
-
-      // After fortifying, also attack if a player hex is reachable
-      setTimeout(() => {
-        const playerAtks = aiGetAllAttacks().filter(a => a.canWin && a.dOwner === PLAYER);
-        if (playerAtks.length > 0) {
-          playerAtks.sort((a, b) => b.margin - a.margin);
-          flashHex(playerAtks[0].sr, playerAtks[0].sc, 'flash-ai-source', 300); SFX.aiMove();
-          setTimeout(() => { executeAIAttack(playerAtks[0]); setTimeout(aiFinish, 500); }, 300);
-        } else { setTimeout(aiFinish, 200); }
-      }, 500);
+      setTimeout(aiFinish, 600);
       return;
     }
 
