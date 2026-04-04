@@ -925,38 +925,34 @@ async function claimUsername(desired) {
     const clean = desired.trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20);
     if (clean.length < 3) return generateRandomUsername();
 
-    const tryClaimName = async (name) => {
+    const tryName = async (name) => {
       const usernameRef = ref(database, `usernames/${name}`);
       try {
         const snap = await get(usernameRef);
-        if (!snap.exists()) {
-          // Release old username first
+        // Available if it doesn't exist, or if we already own it
+        if (!snap.exists() || snap.val()?.owner === progress.username) {
           if (progress.username && progress.username !== name) {
-            await set(ref(database, `usernames/${progress.username}`), null).catch(() => {});
+            set(ref(database, `usernames/${progress.username}`), null).catch(() => {});
           }
-          await set(usernameRef, { claimedAt: Date.now(), owner: progress.username || '' });
-          // Verify we actually got it (re-read to confirm no race)
-          const verify = await get(usernameRef);
-          if (verify.exists() && verify.val().claimedAt) return name;
+          await set(usernameRef, { claimedAt: Date.now(), owner: name });
+          return name;
         }
         return null;
-      } catch(e) { return null; }
+      } catch(e) { return name; }
     };
 
-    // Try exact name first
-    const exact = await tryClaimName(clean);
+    const exact = await tryName(clean);
     if (exact) return exact;
 
-    // Name taken — try up to 10 suffixed variants
+    // Only reach here if name is genuinely taken by someone else
     for (let i = 0; i < 10; i++) {
-      const suffix = String(Math.floor(Math.random() * 9000) + 1000);
-      const candidate = clean.slice(0, 16) + suffix;
-      const result = await tryClaimName(candidate);
+      const suffix = String(Math.floor(Math.random() * 900) + 100);
+      const candidate = clean.slice(0, 17) + suffix;
+      const result = await tryName(candidate);
       if (result) return result;
     }
 
-    // Last resort — timestamp suffix, virtually guaranteed unique
-    return clean.slice(0, 12) + Date.now().toString().slice(-6);
+    return clean.slice(0, 14) + Date.now().toString().slice(-4);
   }
 
   async function findUserByUsername(username) {
