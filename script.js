@@ -312,7 +312,7 @@ const MUSIC_NORMAL  = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/Hex
       if (this._audio && this._currentSrc === src && !this._audio.paused) return;
       if (this._audio) { this._audio.pause(); this._audio.src = ''; }
       this._audio = new Audio(src);
-      this._audio.loop = true; this._audio.volume = 0.45;
+      this._audio.loop = true; this._audio.volume = 0.85;
       this._currentSrc = src;
       const tryPlay = () => this._audio.play().catch(() => {});
       tryPlay();
