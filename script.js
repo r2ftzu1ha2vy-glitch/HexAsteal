@@ -259,8 +259,9 @@ const HexAsteal = (function () {
         setTimeout(() => this.osc(f, 0.18, 'sine', 0.18), i * 90));
     },
     defeat() {
-      [400,350,300,250,200].forEach((f,i) =>
-        setTimeout(() => this.osc(f, 0.22, 'sawtooth', 0.1), i * 120));
+      this.osc(440, 0.12, 'sine', 0.25, 200);
+      setTimeout(() => this.osc(280, 0.08, 'sawtooth', 0.2, 140), 130);
+      setTimeout(() => { this.osc(180, 0.35, 'sawtooth', 0.28, 60); this.noise(0.12, 0.15); }, 230);
     },
     mock() {
       // Descending "wah wah wah" trombone
@@ -3378,8 +3379,7 @@ function showBossIntro() {
     } else if (type === 'draw') {
       SFX.defeat(); btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden');
     } else {
-      SFX.defeat();
-      setTimeout(() => SFX.mock(), 900);
+      SFX.mock();
       if (gameMode !== 'ai') { btnNext.textContent = 'Play Again'; btnNext.classList.remove('hidden'); }
       else { btnNext.classList.add('hidden'); }
     }
