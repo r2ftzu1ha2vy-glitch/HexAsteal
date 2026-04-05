@@ -304,7 +304,7 @@ const MUSIC_NORMAL  = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/Hex
   const MUSIC_BOSS_20 = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled%20(5)-%5BAudioTrimmer.com%5D.mp3';
   const MUSIC_BOSS_30 = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled%20(4)-%5BAudioTrimmer.com%5D-%5BAudioTrimmer.com%5D.mp3';
   const MUSIC_BOSS_40 = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled%20(7)-%5BAudioTrimmer.com%5D.mp3';
-  const MUSIC_BOSS_50 = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled%20(6)-%5BAudioTrimmer.com%5D.mp3';
+  const MUSIC_BOSS_50 = 'https://raw.githubusercontent.com/r2ftzu1ha2vy-glitch/HexAsteal/main/Untitled%20(6)-%5BAudioTrimmer.com%5D-%5BAudioTrimmer.com%5D.mp3';
 
   const BGM = {
     _audio: null, _currentSrc: null, _muted: false,
